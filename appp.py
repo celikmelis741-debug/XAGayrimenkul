@@ -67,11 +67,12 @@ EXCEL_FILE = "ilanlar_oda_salon_rakam.xlsx"
 def load_model_and_data():
     df = pd.read_excel(EXCEL_FILE)
 
-    # Daha dengeli temizlik
+    # Dengeli temizlik
     df = df.dropna(subset=['Fiyat', 'm² (Brüt)'])
     df = df[(df['m² (Brüt)'] >= 25) & (df['m² (Brüt)'] <= 450)]
     df = df[df['Fiyat'] <= df['Fiyat'].quantile(0.985)]
 
+    # Etiketleri düzelt
     etiket_cols = ['havuz', 'otopark', 'balkon', 'manzara', 'site', 'dubleks',
                    'asansor', 'sifir', 'teras', 'bahce', 'guvenlik']
     for col in etiket_cols:
@@ -80,13 +81,21 @@ def load_model_and_data():
         else:
             df[col] = 0
 
+    # Oda ve salon
     df['oda_sayisi'] = pd.to_numeric(df.get('oda_sayisi', 2), errors='coerce').fillna(2)
     df['salon_sayisi'] = pd.to_numeric(df.get('salon_sayisi', 1), errors='coerce').fillna(1)
-    df['Semt'] = df['Semt / Mahalle'].astype(str)
 
-    # Oda düzenini 3+1 formatında oluştur
+    # Oda düzeni 3+1 formatı
     df['Oda Düzeni'] = df['oda_sayisi'].astype(int).astype(str) + '+' + df['salon_sayisi'].astype(int).astype(str)
 
+    # İlçe ve Mahalle ayırma
+    split_cols = df['Semt / Mahalle'].str.split(' / ', n=1, expand=True)
+    df['İlçe'] = split_cols[0].fillna('Bilinmiyor').str.strip()
+    df['Mahalle'] = split_cols[1].fillna('Bilinmiyor').str.strip() if split_cols.shape[1] > 1 else 'Bilinmiyor'
+
+    df['Semt'] = df['Semt / Mahalle'].astype(str)
+
+    # Model özellikleri
     feature_cols = ['m² (Brüt)', 'oda_sayisi', 'salon_sayisi', 'havuz', 'otopark',
                     'balkon', 'site', 'dubleks', 'asansor', 'sifir', 'Semt']
 
@@ -134,12 +143,24 @@ if "actual_price" not in st.session_state:
 # =========================================================
 st.sidebar.header("Filtreler")
 
-semt_list = ["Tüm Bölgeler"] + sorted(df['Semt / Mahalle'].astype(str).unique().tolist())
-selected_semt = st.sidebar.selectbox("Semt / Mahalle", semt_list)
+# İlçe seçimi
+ilce_list = ["Tüm İlçeler"] + sorted(df['İlçe'].unique().tolist())
+selected_ilce = st.sidebar.selectbox("İlçe", ilce_list)
 
+# Mahalle seçimi (seçilen ilçeye göre)
+if selected_ilce == "Tüm İlçeler":
+    mahalle_list = ["Tüm Mahalleler"] + sorted(df['Mahalle'].unique().tolist())
+else:
+    mahalle_list = ["Tüm Mahalleler"] + sorted(
+        df[df['İlçe'] == selected_ilce]['Mahalle'].unique().tolist()
+    )
+selected_mahalle = st.sidebar.selectbox("Mahalle", mahalle_list)
+
+# Oda düzeni
 oda_list = ["Tümü"] + sorted(df['Oda Düzeni'].unique().tolist())
 selected_oda = st.sidebar.selectbox("Oda Düzeni", oda_list)
 
+# m² ve bütçe
 min_m2, max_m2 = int(df['m² (Brüt)'].min()), int(df['m² (Brüt)'].max())
 m2_range = st.sidebar.slider("Brüt m²", min_m2, max_m2, (60, 180))
 
@@ -158,11 +179,13 @@ f_dubleks = st.sidebar.checkbox("Dubleks")
 f_otopark = st.sidebar.checkbox("Otoparklı")
 f_manzara = st.sidebar.checkbox("Manzaralı")
 
-# Temel filtreleme
+# Filtreleme
 filtered = df.copy()
 
-if selected_semt != "Tüm Bölgeler":
-    filtered = filtered[filtered['Semt / Mahalle'] == selected_semt]
+if selected_ilce != "Tüm İlçeler":
+    filtered = filtered[filtered['İlçe'] == selected_ilce]
+if selected_mahalle != "Tüm Mahalleler":
+    filtered = filtered[filtered['Mahalle'] == selected_mahalle]
 if selected_oda != "Tümü":
     filtered = filtered[filtered['Oda Düzeni'] == selected_oda]
 
@@ -194,7 +217,6 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # -------------------- TAB 1 --------------------
 with tab1:
 
-    # Akıllı Arama
     st.subheader("Akıllı Arama (Doğal Dil)")
     arama = st.text_input(
         "Ne arıyorsunuz?",
@@ -249,7 +271,7 @@ with tab1:
     if len(filtered) == 0:
         st.warning("Seçtiğiniz kriterlere uygun ilan bulunamadı.")
     else:
-        show_cols = ['İlan Başlığı', 'Semt / Mahalle', 'Oda Düzeni', 'm² (Brüt)', 'Fiyat']
+        show_cols = ['İlan Başlığı', 'İlçe', 'Mahalle', 'Oda Düzeni', 'm² (Brüt)', 'Fiyat']
         st.dataframe(
             filtered[show_cols].head(50).style.format({'Fiyat': '{:,.0f} TL'}),
             use_container_width=True,
@@ -319,7 +341,7 @@ with tab2:
     map_df = df.copy()
     def get_coords(row):
         for name, (lat, lon) in coords.items():
-            if name.lower() in str(row['Semt / Mahalle']).lower():
+            if name.lower() in str(row['İlçe']).lower() or name.lower() in str(row['Semt / Mahalle']).lower():
                 return pd.Series([lat, lon])
         return pd.Series([41.0082, 28.9784])
 
@@ -332,7 +354,7 @@ with tab2:
         map_df.sample(min(700, len(map_df))),
         lat="lat", lon="lon",
         color="Fiyat", size="m² (Brüt)",
-        hover_name="Semt / Mahalle",
+        hover_name="İlçe",
         color_continuous_scale="Reds",
         size_max=11, zoom=9.3,
         center={"lat": 41.02, "lon": 28.95},
