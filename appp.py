@@ -70,7 +70,7 @@ def load_model_and_data():
     # Daha dengeli temizlik
     df = df.dropna(subset=['Fiyat', 'm² (Brüt)'])
     df = df[(df['m² (Brüt)'] >= 25) & (df['m² (Brüt)'] <= 450)]
-    df = df[df['Fiyat'] <= df['Fiyat'].quantile(0.985)]   # en pahalı %1.5 atılıyor
+    df = df[df['Fiyat'] <= df['Fiyat'].quantile(0.985)]
 
     etiket_cols = ['havuz', 'otopark', 'balkon', 'manzara', 'site', 'dubleks',
                    'asansor', 'sifir', 'teras', 'bahce', 'guvenlik']
@@ -83,6 +83,9 @@ def load_model_and_data():
     df['oda_sayisi'] = pd.to_numeric(df.get('oda_sayisi', 2), errors='coerce').fillna(2)
     df['salon_sayisi'] = pd.to_numeric(df.get('salon_sayisi', 1), errors='coerce').fillna(1)
     df['Semt'] = df['Semt / Mahalle'].astype(str)
+
+    # Oda düzenini 3+1 formatında oluştur
+    df['Oda Düzeni'] = df['oda_sayisi'].astype(int).astype(str) + '+' + df['salon_sayisi'].astype(int).astype(str)
 
     feature_cols = ['m² (Brüt)', 'oda_sayisi', 'salon_sayisi', 'havuz', 'otopark',
                     'balkon', 'site', 'dubleks', 'asansor', 'sifir', 'Semt']
@@ -134,8 +137,8 @@ st.sidebar.header("Filtreler")
 semt_list = ["Tüm Bölgeler"] + sorted(df['Semt / Mahalle'].astype(str).unique().tolist())
 selected_semt = st.sidebar.selectbox("Semt / Mahalle", semt_list)
 
-oda_list = ["Tümü"] + sorted(df['oda_sayisi'].unique().tolist())
-selected_oda = st.sidebar.selectbox("Oda Sayısı", oda_list)
+oda_list = ["Tümü"] + sorted(df['Oda Düzeni'].unique().tolist())
+selected_oda = st.sidebar.selectbox("Oda Düzeni", oda_list)
 
 min_m2, max_m2 = int(df['m² (Brüt)'].min()), int(df['m² (Brüt)'].max())
 m2_range = st.sidebar.slider("Brüt m²", min_m2, max_m2, (60, 180))
@@ -161,7 +164,7 @@ filtered = df.copy()
 if selected_semt != "Tüm Bölgeler":
     filtered = filtered[filtered['Semt / Mahalle'] == selected_semt]
 if selected_oda != "Tümü":
-    filtered = filtered[filtered['oda_sayisi'] == selected_oda]
+    filtered = filtered[filtered['Oda Düzeni'] == selected_oda]
 
 filtered = filtered[
     (filtered['m² (Brüt)'] >= m2_range[0]) &
@@ -246,7 +249,7 @@ with tab1:
     if len(filtered) == 0:
         st.warning("Seçtiğiniz kriterlere uygun ilan bulunamadı.")
     else:
-        show_cols = ['İlan Başlığı', 'Semt / Mahalle', 'oda_sayisi', 'salon_sayisi', 'm² (Brüt)', 'Fiyat']
+        show_cols = ['İlan Başlığı', 'Semt / Mahalle', 'Oda Düzeni', 'm² (Brüt)', 'Fiyat']
         st.dataframe(
             filtered[show_cols].head(50).style.format({'Fiyat': '{:,.0f} TL'}),
             use_container_width=True,
