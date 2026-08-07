@@ -16,29 +16,19 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Profesyonel koyu tema
 st.markdown("""
 <style>
-    .stApp {
-        background-color: #0B0F19;
-        color: #E2E8F0;
-    }
-    h1, h2, h3 {
-        color: #F8FAFC !important;
-        font-weight: 600 !important;
-    }
+    .stApp { background-color: #0B0F19; color: #E2E8F0; }
+    h1, h2, h3 { color: #F8FAFC !important; font-weight: 600 !important; }
     div[data-testid="stMetric"] {
         background-color: #111827;
         border: 1px solid #1F2937;
         border-radius: 12px;
         padding: 16px 20px;
     }
-    div[data-testid="stMetric"] label {
-        color: #94A3B8 !important;
-    }
+    div[data-testid="stMetric"] label { color: #94A3B8 !important; }
     div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
-        color: #F1F5F9 !important;
-        font-weight: 600 !important;
+        color: #F1F5F9 !important; font-weight: 600 !important;
     }
     section[data-testid="stSidebar"] {
         background-color: #111827;
@@ -51,9 +41,7 @@ st.markdown("""
         border: none;
         font-weight: 500;
     }
-    .stButton > button:hover {
-        background-color: #2563EB;
-    }
+    .stButton > button:hover { background-color: #2563EB; }
     .stTabs [data-baseweb="tab"] {
         background-color: #1F2937;
         border-radius: 8px;
@@ -67,56 +55,43 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("XAI Gayrimenkul Değerleme Platformu")
-st.caption("CatBoost tabanlı açıklanabilir yapay zekâ destekli değerleme sistemi")
+st.caption("CatBoost tabanlı açıklanabilir yapay zekâ + etiketli filtreleme sistemi")
 
 # =========================================================
-# 2. VERİ VE MODEL YÜKLEME
+# 2. VERİ VE MODEL
 # =========================================================
-EXCEL_FILE = "sahibinden_ilanlar_temiz_cloud.xlsx"
+EXCEL_FILE = "ilanlar_oda_salon_rakam.xlsx"   # Yeni dosya
 
 @st.cache_resource(show_spinner="Model ve veriler yükleniyor...")
 def load_model_and_data():
-    df_raw = pd.read_excel(EXCEL_FILE)
+    df = pd.read_excel(EXCEL_FILE)
 
-    max_price = df_raw['Fiyat'].quantile(0.97)
-    df = df_raw[
-        (df_raw['m² (Brüt)'] <= 500) &
-        (df_raw['m² (Brüt)'] >= 20) &
-        (df_raw['Fiyat'] <= max_price)
-    ].copy()
+    # Temizlik
+    df = df.dropna(subset=['Fiyat', 'm² (Brüt)'])
+    df = df[(df['m² (Brüt)'] >= 30) & (df['m² (Brüt)'] <= 500)]
+    df = df[df['Fiyat'] <= df['Fiyat'].quantile(0.98)]
 
-    def parse_features(row):
-        title = str(row.get('İlan Başlığı', '')).upper()
-        brut = row['m² (Brüt)']
-        net = int(brut * 0.82)
-
-        if any(x in title for x in ['SIFIR', 'PROJEDEN', '0 YAŞ', 'YENİ BİNA', 'SIFIR DAİRE']):
-            yasi, yasi_num = '0 (Sıfır)', 0
-        elif any(x in title for x in ['1 YAŞ', '2 YAŞ', '3 YAŞ']):
-            yasi, yasi_num = '1-3 Yaş', 2
-        elif any(x in title for x in ['4 YAŞ', '5 YAŞ']):
-            yasi, yasi_num = '3-5 Yaş', 4
-        elif any(x in title for x in ['6 YAŞ', '7 YAŞ', '8 YAŞ', '9 YAŞ', '10 YAŞ']):
-            yasi, yasi_num = '5-10 Yaş', 8
+    # Eksik etiketleri 0 yap
+    etiket_cols = ['havuz', 'otopark', 'balkon', 'manzara', 'site', 'dubleks',
+                   'asansor', 'sifir', 'teras', 'bahce', 'guvenlik']
+    for col in etiket_cols:
+        if col in df.columns:
+            df[col] = df[col].fillna(0).astype(int)
         else:
-            yasi, yasi_num = 'Belirtilmemiş / 5+ Yaş', 12
+            df[col] = 0
 
-        if any(x in title for x in ['DUBLEKS', 'DUBLEX']):
-            kat = 'Dubleks'
-        elif any(x in title for x in ['BAHÇE', 'GİRİŞ', 'KOT']):
-            kat = 'Giriş / Bahçe Katı'
-        elif any(x in title for x in ['TERAS', 'EN ÜST', 'ÇATI']):
-            kat = 'En Üst / Teras Kat'
-        else:
-            kat = 'Ara Kat'
+    # Oda ve salon
+    df['oda_sayisi'] = pd.to_numeric(df.get('oda_sayisi', 2), errors='coerce').fillna(2)
+    df['salon_sayisi'] = pd.to_numeric(df.get('salon_sayisi', 1), errors='coerce').fillna(1)
 
-        return pd.Series([net, yasi, yasi_num, kat])
-
-    df[['m² (Net)', 'Bina Yaşı', 'Bina Yaşı Num', 'Bulunduğu Kat']] = df.apply(parse_features, axis=1)
-    df['Oda Sayısı Num'] = df['Oda Sayısı'].astype(str).str.extract(r'(\d+)').astype(float).fillna(2)
+    # Model için özellikler
+    feature_cols = ['m² (Brüt)', 'oda_sayisi', 'salon_sayisi', 'havuz', 'otopark',
+                    'balkon', 'site', 'dubleks', 'asansor', 'sifir']
+    
+    # Semt bilgisini de ekleyelim
     df['Semt'] = df['Semt / Mahalle'].astype(str)
+    feature_cols.append('Semt')
 
-    feature_cols = ['m² (Brüt)', 'm² (Net)', 'Oda Sayısı Num', 'Bina Yaşı Num', 'Semt']
     X = df[feature_cols].copy()
     y_log = np.log1p(df['Fiyat'])
     X['Semt'] = X['Semt'].astype(str)
@@ -124,7 +99,7 @@ def load_model_and_data():
     X_train, X_test, y_train, y_test = train_test_split(X, y_log, test_size=0.2, random_state=42)
 
     model = CatBoostRegressor(
-        iterations=600,
+        iterations=500,
         learning_rate=0.05,
         depth=6,
         cat_features=['Semt'],
@@ -140,12 +115,12 @@ def load_model_and_data():
     mae = mean_absolute_error(y_true, y_pred)
     rmse = np.sqrt(mean_squared_error(y_true, y_pred))
 
-    return model, df, r2, mae, rmse
+    return model, df, r2, mae, rmse, feature_cols
 
 try:
-    model, df, model_r2, model_mae, model_rmse = load_model_and_data()
+    model, df, model_r2, model_mae, model_rmse, feature_cols = load_model_and_data()
 except Exception as e:
-    st.error(f"Veri yüklenirken hata oluştu: {e}")
+    st.error(f"Veri yüklenirken hata: {e}")
     st.stop()
 
 # Session state
@@ -157,89 +132,101 @@ if "actual_price" not in st.session_state:
     st.session_state.actual_price = 0
 
 # =========================================================
-# 3. SIDEBAR FİLTRELEME
+# 3. SIDEBAR FİLTRELER
 # =========================================================
-st.sidebar.header("Ev Arama ve Filtreleme")
+st.sidebar.header("Filtreler")
 
-semt_options = ["Tüm Bölgeler"] + sorted(df['Semt / Mahalle'].astype(str).unique().tolist())
-selected_semt = st.sidebar.selectbox("Semt / Mahalle", semt_options)
+# Klasik filtreler
+semt_list = ["Tüm Bölgeler"] + sorted(df['Semt / Mahalle'].astype(str).unique().tolist())
+selected_semt = st.sidebar.selectbox("Semt / Mahalle", semt_list)
 
-oda_options = ["Tüm Oda Tipleri"] + sorted(df['Oda Sayısı'].astype(str).unique().tolist())
-selected_oda = st.sidebar.selectbox("Oda Sayısı", oda_options)
+oda_list = ["Tümü"] + sorted(df['oda_sayisi'].unique().tolist())
+selected_oda = st.sidebar.selectbox("Oda Sayısı", oda_list)
 
-yas_options = ["Tüm Bina Yaşları", "0 (Sıfır)", "1-3 Yaş", "3-5 Yaş", "5-10 Yaş", "Belirtilmemiş / 5+ Yaş"]
-selected_yas = st.sidebar.selectbox("Bina Yaşı", yas_options)
-
-kat_options = ["Tüm Katlar", "Ara Kat", "Giriş / Bahçe Katı", "En Üst / Teras Kat", "Dubleks"]
-selected_kat = st.sidebar.selectbox("Bulunduğu Kat", kat_options)
-
-min_m2 = int(df['m² (Brüt)'].min())
-max_m2 = int(df['m² (Brüt)'].max())
-selected_m2 = st.sidebar.slider("Brüt m² Aralığı", min_m2, max_m2, (50, 200), step=5)
+min_m2, max_m2 = int(df['m² (Brüt)'].min()), int(df['m² (Brüt)'].max())
+m2_range = st.sidebar.slider("Brüt m²", min_m2, max_m2, (60, 180))
 
 max_price = int(df['Fiyat'].max())
-selected_budget = st.sidebar.number_input(
-    "Maksimum Bütçe (TL)",
-    min_value=1_000_000,
-    max_value=max_price,
-    value=min(15_000_000, max_price),
-    step=500_000
-)
+budget = st.sidebar.number_input("Maksimum Bütçe (TL)", 1_000_000, max_price, min(12_000_000, max_price), 500_000)
 
-# Filtre uygula
+st.sidebar.markdown("---")
+st.sidebar.subheader("Özellik Filtreleri")
+
+f_havuz = st.sidebar.checkbox("Havuzlu")
+f_site = st.sidebar.checkbox("Site İçinde")
+f_asansor = st.sidebar.checkbox("Asansörlü")
+f_balkon = st.sidebar.checkbox("Balkonlu")
+f_sifir = st.sidebar.checkbox("Sıfır / Yeni")
+f_dubleks = st.sidebar.checkbox("Dubleks")
+f_otopark = st.sidebar.checkbox("Otoparklı")
+f_manzara = st.sidebar.checkbox("Manzaralı")
+
+# Filtreleme
 filtered = df.copy()
+
 if selected_semt != "Tüm Bölgeler":
     filtered = filtered[filtered['Semt / Mahalle'] == selected_semt]
-if selected_oda != "Tüm Oda Tipleri":
-    filtered = filtered[filtered['Oda Sayısı'] == selected_oda]
-if selected_yas != "Tüm Bina Yaşları":
-    filtered = filtered[filtered['Bina Yaşı'] == selected_yas]
-if selected_kat != "Tüm Katlar":
-    filtered = filtered[filtered['Bulunduğu Kat'] == selected_kat]
+if selected_oda != "Tümü":
+    filtered = filtered[filtered['oda_sayisi'] == selected_oda]
 
 filtered = filtered[
-    (filtered['m² (Brüt)'] >= selected_m2[0]) &
-    (filtered['m² (Brüt)'] <= selected_m2[1]) &
-    (filtered['Fiyat'] <= selected_budget)
+    (filtered['m² (Brüt)'] >= m2_range[0]) &
+    (filtered['m² (Brüt)'] <= m2_range[1]) &
+    (filtered['Fiyat'] <= budget)
 ]
+
+if f_havuz: filtered = filtered[filtered['havuz'] == 1]
+if f_site: filtered = filtered[filtered['site'] == 1]
+if f_asansor: filtered = filtered[filtered['asansor'] == 1]
+if f_balkon: filtered = filtered[filtered['balkon'] == 1]
+if f_sifir: filtered = filtered[filtered['sifir'] == 1]
+if f_dubleks: filtered = filtered[filtered['dubleks'] == 1]
+if f_otopark: filtered = filtered[filtered['otopark'] == 1]
+if f_manzara: filtered = filtered[filtered['manzara'] == 1]
 
 # =========================================================
 # 4. TABLAR
 # =========================================================
 tab1, tab2, tab3, tab4 = st.tabs([
-    "Yapay Zeka Tahmini & Fırsat Analizi",
+    "Tahmin & Fırsat Analizi",
     "Lokasyon Dağılımı",
     "Model Açıklanabilirliği",
-    "Performans & Kredi Simülasyonu"
+    "Performans & Kredi"
 ])
 
 # -------------------- TAB 1 --------------------
 with tab1:
-    st.subheader(f"Filtreye Uygun İlanlar ({len(filtered)} adet)")
+    st.subheader(f"Filtrelenen İlanlar ({len(filtered)} adet)")
 
     if len(filtered) == 0:
         st.warning("Seçtiğiniz kriterlere uygun ilan bulunamadı.")
     else:
-        show_cols = ['İlan Başlığı', 'Semt / Mahalle', 'Oda Sayısı', 'm² (Brüt)', 'Bina Yaşı', 'Bulunduğu Kat', 'Fiyat']
+        show_cols = ['İlan Başlığı', 'Semt / Mahalle', 'oda_sayisi', 'salon_sayisi', 'm² (Brüt)', 'Fiyat']
         st.dataframe(
-            filtered[show_cols].head(25).style.format({'Fiyat': '{:,.0f} TL'}),
+            filtered[show_cols].head(30).style.format({'Fiyat': '{:,.0f} TL'}),
             use_container_width=True,
-            height=230
+            height=240
         )
 
         st.divider()
-        st.subheader("Listeden Ev Seçerek Analiz Et")
+        st.subheader("Listeden İlan Seçerek Değerle")
 
-        selected_title = st.selectbox("İlan seçin:", filtered['İlan Başlığı'].tolist())
+        selected_title = st.selectbox("İlan seçin", filtered['İlan Başlığı'].tolist())
 
         if st.button("Seçili İlanı Analiz Et", type="primary"):
             house = filtered[filtered['İlan Başlığı'] == selected_title].iloc[0]
 
             input_data = pd.DataFrame([{
                 'm² (Brüt)': house['m² (Brüt)'],
-                'm² (Net)': house['m² (Net)'],
-                'Oda Sayısı Num': house['Oda Sayısı Num'],
-                'Bina Yaşı Num': house['Bina Yaşı Num'],
+                'oda_sayisi': house['oda_sayisi'],
+                'salon_sayisi': house['salon_sayisi'],
+                'havuz': house['havuz'],
+                'otopark': house['otopark'],
+                'balkon': house['balkon'],
+                'site': house['site'],
+                'dubleks': house['dubleks'],
+                'asansor': house['asansor'],
+                'sifir': house['sifir'],
                 'Semt': str(house['Semt / Mahalle'])
             }])
 
@@ -248,92 +235,61 @@ with tab1:
             st.session_state.actual_price = house['Fiyat']
             st.session_state.prediction_done = True
 
-        # Manuel giriş
-        with st.expander("Manuel Parametre ile Değerleme"):
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                m_ilce = st.selectbox("İlçe", sorted(df['Semt / Mahalle'].astype(str).unique())[:40], key="m_ilce")
-                m_net = st.number_input("Net m²", 30, 400, 95, key="m_net")
-                m_brut = st.number_input("Brüt m²", 40, 500, 115, key="m_brut")
-            with c2:
-                m_oda = st.selectbox("Oda", ["1", "2", "3", "4", "5"], key="m_oda")
-                m_yas = st.number_input("Bina Yaşı", 0, 40, 5, key="m_yas")
-            with c3:
-                m_site = st.checkbox("Site İçinde", True, key="m_site")
-                m_asansor = st.checkbox("Asansör", True, key="m_asansor")
-                m_balkon = st.checkbox("Balkon", True, key="m_balkon")
-
-            if st.button("Manuel Değerleme Yap"):
-                input_data = pd.DataFrame([{
-                    'm² (Brüt)': m_brut,
-                    'm² (Net)': m_net,
-                    'Oda Sayısı Num': float(m_oda),
-                    'Bina Yaşı Num': float(m_yas),
-                    'Semt': m_ilce
-                }])
-                pred = float(np.expm1(model.predict(input_data)[0]))
-                if m_site: pred *= 1.04
-                if m_asansor: pred *= 1.02
-                if m_balkon: pred *= 1.015
-
-                st.session_state.ai_price = pred
-                st.session_state.actual_price = 0
-                st.session_state.prediction_done = True
-
-    # Sonuç gösterimi
+    # Sonuç
     if st.session_state.prediction_done:
         ai = st.session_state.ai_price
-        alt = ai * 0.93
-        ust = ai * 1.07
+        alt, ust = ai * 0.93, ai * 1.07
 
         st.success("Analiz tamamlandı")
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Yapay Zeka Değeri", f"{ai:,.0f} TL")
-        m2.metric("Hızlı Satış Bandı", f"{alt:,.0f} TL")
-        m3.metric("Üst Bant", f"{ust:,.0f} TL")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Yapay Zeka Değeri", f"{ai:,.0f} TL")
+        c2.metric("Hızlı Satış Bandı", f"{alt:,.0f} TL")
+        c3.metric("Üst Bant", f"{ust:,.0f} TL")
 
         if st.session_state.actual_price > 0:
             actual = st.session_state.actual_price
             fark = ai - actual
             yuzde = (fark / ai) * 100
             if fark > 0:
-                st.info(f"Bu ilan tahmini değere göre **%{yuzde:.1f} kelepir** görünüyor. (İlan Fiyatı: {actual:,.0f} TL)")
+                st.info(f"Bu ilan tahmini değere göre **%{yuzde:.1f} kelepir**. (İlan: {actual:,.0f} TL)")
             else:
-                st.warning(f"Bu ilan tahmini değere göre **%{abs(yuzde):.1f} pahalı** görünüyor. (İlan Fiyatı: {actual:,.0f} TL)")
+                st.warning(f"Bu ilan tahmini değere göre **%{abs(yuzde):.1f} pahalı**. (İlan: {actual:,.0f} TL)")
 
 # -------------------- TAB 2 --------------------
 with tab2:
-    st.subheader("İstanbul İlçeleri Lokasyon Dağılımı")
+    st.subheader("İstanbul Lokasyon Dağılımı")
 
+    # Basit koordinatlar (genişletilebilir)
     coords = {
         'Ataşehir': (40.9833, 29.1167), 'Kadıköy': (40.9903, 29.0275), 'Üsküdar': (41.0244, 29.0050),
         'Beşiktaş': (41.0422, 29.0067), 'Şişli': (41.0600, 28.9870), 'Bakırköy': (40.9800, 28.8700),
         'Bağcılar': (41.0339, 28.8579), 'Bahçelievler': (41.0003, 28.8638), 'Küçükçekmece': (40.9917, 28.7719),
         'Avcılar': (40.9801, 28.7175), 'Esenyurt': (41.0342, 28.6801), 'Başakşehir': (41.0975, 28.8064),
         'Maltepe': (40.9333, 29.1333), 'Kartal': (40.8886, 29.1856), 'Pendik': (40.8750, 29.2333),
-        'Ümraniye': (41.0256, 29.1244), 'Sancaktepe': (40.9900, 29.2300), 'Beylikdüzü': (40.9900, 28.6400)
+        'Ümraniye': (41.0256, 29.1244), 'Sancaktepe': (40.9900, 29.2300), 'Beylikdüzü': (40.9900, 28.6400),
+        'Arnavutköy': (41.1852, 28.7410), 'Hadımköy': (41.15, 28.60)
     }
 
     map_df = df.copy()
-    def get_lat_lon(row):
+    def get_coords(row):
         for name, (lat, lon) in coords.items():
-            if name in str(row['Semt / Mahalle']):
+            if name.lower() in str(row['Semt / Mahalle']).lower():
                 return pd.Series([lat, lon])
         return pd.Series([41.0082, 28.9784])
 
-    map_df[['lat', 'lon']] = map_df.apply(get_lat_lon, axis=1)
+    map_df[['lat', 'lon']] = map_df.apply(get_coords, axis=1)
     np.random.seed(42)
-    map_df['lat'] += np.random.normal(0, 0.006, len(map_df))
-    map_df['lon'] += np.random.normal(0, 0.006, len(map_df))
+    map_df['lat'] += np.random.normal(0, 0.007, len(map_df))
+    map_df['lon'] += np.random.normal(0, 0.007, len(map_df))
 
     fig = px.scatter_mapbox(
-        map_df.sample(min(700, len(map_df))),
+        map_df.sample(min(600, len(map_df))),
         lat="lat", lon="lon",
         color="Fiyat", size="m² (Brüt)",
         hover_name="Semt / Mahalle",
         color_continuous_scale="Reds",
-        size_max=12, zoom=9.5,
-        center={"lat": 41.01, "lon": 28.98},
+        size_max=11, zoom=9.3,
+        center={"lat": 41.02, "lon": 28.95},
         mapbox_style="carto-darkmatter",
         height=520
     )
@@ -343,27 +299,26 @@ with tab2:
 # -------------------- TAB 3 --------------------
 with tab3:
     st.subheader("Model Açıklanabilirliği")
-    st.caption(f"R² Skoru: **%{model_r2*100:.2f}**  |  MAE: {model_mae:,.0f} TL")
+    st.caption(f"R²: **%{model_r2*100:.2f}**  |  MAE: {model_mae:,.0f} TL")
 
     try:
         importance = model.get_feature_importance()
-        names = ['m² (Brüt)', 'm² (Net)', 'Oda Sayısı', 'Bina Yaşı', 'Semt / İlçe']
-        f_df = pd.DataFrame({'Öznitelik': names, 'Önem': importance}).sort_values('Önem')
+        # Son özellik Semt olduğu için isimleri ayarlıyoruz
+        names = ['m² (Brüt)', 'Oda', 'Salon', 'Havuz', 'Otopark', 'Balkon',
+                 'Site', 'Dubleks', 'Asansör', 'Sıfır', 'Semt']
+        f_df = pd.DataFrame({'Öznitelik': names[:len(importance)], 'Önem': importance}).sort_values('Önem')
 
-        fig = px.bar(
-            f_df, x='Önem', y='Öznitelik', orientation='h',
-            title="Konut Fiyatını En Çok Etkileyen Faktörler",
-            color='Önem', color_continuous_scale='Blues'
-        )
-        fig.update_layout(template="plotly_dark", height=380)
+        fig = px.bar(f_df, x='Önem', y='Öznitelik', orientation='h',
+                     title="Fiyatı En Çok Etkileyen Faktörler",
+                     color='Önem', color_continuous_scale='Blues')
+        fig.update_layout(template="plotly_dark", height=400)
         st.plotly_chart(fig, use_container_width=True)
-    except Exception:
-        st.info("Öznitelik önem grafiği şu an hesaplanamadı.")
+    except:
+        st.info("Öznitelik önem grafiği hesaplanamadı.")
 
 # -------------------- TAB 4 --------------------
 with tab4:
-    st.subheader("Akademik Model Performans Karşılaştırması")
-
+    st.subheader("Model Performans Karşılaştırması")
     benchmark = pd.DataFrame([
         {"Model": "CatBoost (Bu Model)", "R²": f"%{model_r2*100:.2f}", "MAE": f"{model_mae:,.0f} TL", "RMSE": f"{model_rmse:,.0f} TL"},
         {"Model": "LightGBM", "R²": "%93.00", "MAE": "806,166 TL", "RMSE": "1,017,600 TL"},
@@ -387,35 +342,28 @@ with tab4:
     }
 
     col1, col2 = st.columns(2)
-
     with col1:
-        tutar = st.number_input("Konut Ekspertiz / Satış Tutarı (TL)", value=float(st.session_state.ai_price), step=100_000.0)
-        banka = st.selectbox("Finansman Sağlayacak Kurum", list(bankalar.keys()))
-
+        tutar = st.number_input("Konut Değeri (TL)", value=float(st.session_state.ai_price), step=100000.0)
+        banka = st.selectbox("Banka", list(bankalar.keys()))
         if banka == "Özel Parametre Gir":
-            faiz = st.number_input("Aylık Akdi Faiz Oranı (%)", 0.1, 10.0, 2.79, 0.01)
+            faiz = st.number_input("Aylık Faiz (%)", 0.1, 10.0, 2.79, 0.01)
         else:
             faiz = bankalar[banka]
-            st.info(f"**{banka}**  |  Aylık Faiz: **%{faiz}**")
-
+            st.info(f"**{banka}** | Aylık Faiz: **%{faiz}**")
         pesinat = st.slider("Peşinat Oranı (%)", 10, 90, 20, 5)
-        vade = st.selectbox("Vade Süresi (Ay)", [12, 24, 36, 48, 60, 84, 96, 120, 180, 240], index=7)
+        vade = st.selectbox("Vade (Ay)", [60, 84, 96, 120, 180, 240], index=3)
 
     with col2:
         pesinat_tutar = tutar * (pesinat / 100)
         kredi = tutar - pesinat_tutar
-
         if kredi > 0:
             r = faiz / 100
             taksit = (kredi * r * (1 + r)**vade) / ((1 + r)**vade - 1)
             toplam = taksit * vade
-            faiz_yuku = toplam - kredi
-
-            st.subheader("Finansman Detay Raporu")
-            st.metric("Ödenecek Peşinat", f"{pesinat_tutar:,.0f} TL")
-            st.metric("Kullanılacak Kredi", f"{kredi:,.0f} TL")
+            st.metric("Peşinat", f"{pesinat_tutar:,.0f} TL")
+            st.metric("Kredi Tutarı", f"{kredi:,.0f} TL")
             st.metric("Aylık Taksit", f"{taksit:,.2f} TL")
             st.metric("Toplam Geri Ödeme", f"{toplam:,.2f} TL")
-            st.caption(f"Toplam Faiz Yükü: **{faiz_yuku:,.2f} TL**")
+            st.caption(f"Toplam Faiz: **{toplam - kredi:,.2f} TL**")
         else:
-            st.warning("Peşinat tutarı konut değerinden büyük olamaz.")
+            st.warning("Peşinat konut değerinden büyük olamaz.")
