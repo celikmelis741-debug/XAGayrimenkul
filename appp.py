@@ -67,9 +67,10 @@ EXCEL_FILE = "ilanlar_oda_salon_rakam.xlsx"
 def load_model_and_data():
     df = pd.read_excel(EXCEL_FILE)
 
+    # Daha dengeli temizlik
     df = df.dropna(subset=['Fiyat', 'm² (Brüt)'])
-    df = df[(df['m² (Brüt)'] >= 30) & (df['m² (Brüt)'] <= 500)]
-    df = df[df['Fiyat'] <= df['Fiyat'].quantile(0.98)]
+    df = df[(df['m² (Brüt)'] >= 25) & (df['m² (Brüt)'] <= 450)]
+    df = df[df['Fiyat'] <= df['Fiyat'].quantile(0.985)]   # en pahalı %1.5 atılıyor
 
     etiket_cols = ['havuz', 'otopark', 'balkon', 'manzara', 'site', 'dubleks',
                    'asansor', 'sifir', 'teras', 'bahce', 'guvenlik']
@@ -190,7 +191,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # -------------------- TAB 1 --------------------
 with tab1:
 
-    # ----- AKILLI ARAMA (Açık Kaynaklı AI) -----
+    # Akıllı Arama
     st.subheader("Akıllı Arama (Doğal Dil)")
     arama = st.text_input(
         "Ne arıyorsunuz?",
@@ -225,14 +226,12 @@ with tab1:
         if "bahçe" in metin or "bahce" in metin:
             sonuc = sonuc[sonuc['bahce'] == 1]
 
-        # 3+1, 2+1 gibi oda yakalama
         oda_eslesme = re.search(r'(\d)\s*\+\s*(\d)', metin)
         if oda_eslesme:
             oda = int(oda_eslesme.group(1))
             salon = int(oda_eslesme.group(2))
             sonuc = sonuc[(sonuc['oda_sayisi'] == oda) & (sonuc['salon_sayisi'] == salon)]
 
-        # Hiçbir etiket tutmazsa başlıktan ara
         if len(sonuc) == len(dataframe):
             sonuc = dataframe[dataframe['İlan Başlığı'].str.lower().str.contains(metin, na=False)]
 
@@ -242,7 +241,6 @@ with tab1:
         filtered = akilli_filtrele(filtered, arama)
         st.success(f"Akıllı arama sonucu: **{len(filtered)}** ilan bulundu")
 
-    # ----- İLAN LİSTESİ -----
     st.subheader(f"Filtrelenen İlanlar ({len(filtered)} adet)")
 
     if len(filtered) == 0:
@@ -250,9 +248,9 @@ with tab1:
     else:
         show_cols = ['İlan Başlığı', 'Semt / Mahalle', 'oda_sayisi', 'salon_sayisi', 'm² (Brüt)', 'Fiyat']
         st.dataframe(
-            filtered[show_cols].head(30).style.format({'Fiyat': '{:,.0f} TL'}),
+            filtered[show_cols].head(50).style.format({'Fiyat': '{:,.0f} TL'}),
             use_container_width=True,
-            height=240
+            height=260
         )
 
         st.divider()
@@ -282,7 +280,6 @@ with tab1:
             st.session_state.actual_price = house['Fiyat']
             st.session_state.prediction_done = True
 
-    # Sonuç gösterimi
     if st.session_state.prediction_done:
         ai = st.session_state.ai_price
         alt, ust = ai * 0.93, ai * 1.07
@@ -329,7 +326,7 @@ with tab2:
     map_df['lon'] += np.random.normal(0, 0.007, len(map_df))
 
     fig = px.scatter_mapbox(
-        map_df.sample(min(600, len(map_df))),
+        map_df.sample(min(700, len(map_df))),
         lat="lat", lon="lon",
         color="Fiyat", size="m² (Brüt)",
         hover_name="Semt / Mahalle",
