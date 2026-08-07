@@ -291,19 +291,21 @@ with tab1:
         st.warning("Seçtiğiniz kriterlere uygun ilan bulunamadı.")
     else:
         show_cols = ['İlan Başlığı', 'İlçe', 'Mahalle', 'Oda Düzeni', 'm² (Brüt)', 'Fiyat']
-        st.dataframe(
+        
+        # Tablodan doğrudan tıklama seçimi
+        event = st.dataframe(
             filtered[show_cols].head(50).style.format({'Fiyat': '{:,.0f} TL'}),
             use_container_width=True,
-            height=260
+            height=260,
+            on_select="rerun",
+            selection_mode="single-row",
+            key="df_selection"
         )
 
-        st.divider()
-        st.subheader("Listeden İlan Seçerek Değerle")
-
-        selected_title = st.selectbox("İlan seçin", filtered['İlan Başlığı'].tolist(), key="ilan_sec")
-
-        if st.button("Seçili İlanı Analiz Et", type="primary", key="analiz_btn"):
-            house = filtered[filtered['İlan Başlığı'] == selected_title].iloc[0]
+        selected_rows = event.get("selection", {}).get("rows", [])
+        if selected_rows:
+            selected_idx = selected_rows[0]
+            house = filtered.iloc[selected_idx]
 
             input_data = pd.DataFrame([{
                 'm² (Brüt)': house['m² (Brüt)'],
@@ -323,11 +325,14 @@ with tab1:
             st.session_state.ai_price = pred
             st.session_state.actual_price = house['Fiyat']
             st.session_state.prediction_done = True
+        else:
+            st.info("💡 Analiz etmek istediğiniz ilanın üzerine yukarıdaki tablodan tıklayın.")
 
     if st.session_state.prediction_done:
         ai = st.session_state.ai_price
         alt, ust = ai * 0.93, ai * 1.07
 
+        st.divider()
         st.success("Analiz tamamlandı")
         c1, c2, c3 = st.columns(3)
         c1.metric("Yapay Zeka Değeri", f"{ai:,.0f} TL")
