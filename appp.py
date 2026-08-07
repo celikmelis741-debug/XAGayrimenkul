@@ -235,6 +235,9 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # -------------------- TAB 1 --------------------
 with tab1:
 
+    # -------------------- TAB 1 --------------------
+with tab1:
+
     st.subheader("Akıllı Arama (Doğal Dil)")
     arama = st.text_input(
         "Ne arıyorsunuz?",
@@ -286,25 +289,29 @@ with tab1:
         st.success(f"Akıllı arama sonucu: **{len(filtered)}** ilan bulundu")
 
     st.subheader(f"Filtrelenen İlanlar ({len(filtered)} adet)")
+    st.caption("Bir satıra tıklayarak ilanı seçin, analizi aşağıda görünecektir.")
 
     if len(filtered) == 0:
         st.warning("Seçtiğiniz kriterlere uygun ilan bulunamadı.")
     else:
         show_cols = ['İlan Başlığı', 'İlçe', 'Mahalle', 'Oda Düzeni', 'm² (Brüt)', 'Fiyat']
-        st.dataframe(
+        
+        # Satır seçilebilir tablo
+        selection = st.dataframe(
             filtered[show_cols].head(50).style.format({'Fiyat': '{:,.0f} TL'}),
             use_container_width=True,
-            height=260
+            height=300,
+            on_select="rerun",
+            selection_mode="single-row",
+            key="ilan_tablosu"
         )
 
-        st.divider()
-        st.subheader("Listeden İlan Seçerek Değerle")
+        # Seçilen satır varsa analizi göster
+        if selection and selection.selection.rows:
+            selected_idx = selection.selection.rows[0]
+            house = filtered.head(50).iloc[selected_idx]
 
-        selected_title = st.selectbox("İlan seçin", filtered['İlan Başlığı'].tolist(), key="ilan_sec")
-
-        if st.button("Seçili İlanı Analiz Et", type="primary", key="analiz_btn"):
-            house = filtered[filtered['İlan Başlığı'] == selected_title].iloc[0]
-
+            # Tahmin yap
             input_data = pd.DataFrame([{
                 'm² (Brüt)': house['m² (Brüt)'],
                 'oda_sayisi': house['oda_sayisi'],
@@ -320,29 +327,26 @@ with tab1:
             }])
 
             pred = float(np.expm1(model.predict(input_data)[0]))
-            st.session_state.ai_price = pred
-            st.session_state.actual_price = house['Fiyat']
-            st.session_state.prediction_done = True
+            actual = house['Fiyat']
+            alt = pred * 0.93
+            ust = pred * 1.07
+            fark = pred - actual
+            yuzde = (fark / pred) * 100 if pred > 0 else 0
 
-    if st.session_state.prediction_done:
-        ai = st.session_state.ai_price
-        alt, ust = ai * 0.93, ai * 1.07
+            st.divider()
+            st.subheader(f"Seçilen İlan Analizi")
+            st.write(f"**{house['İlan Başlığı']}**")
+            st.caption(f"{house['İlçe']} / {house['Mahalle']}  |  {house['Oda Düzeni']}  |  {house['m² (Brüt)']} m²")
 
-        st.success("Analiz tamamlandı")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Yapay Zeka Değeri", f"{ai:,.0f} TL")
-        c2.metric("Hızlı Satış Bandı", f"{alt:,.0f} TL")
-        c3.metric("Üst Bant", f"{ust:,.0f} TL")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Yapay Zeka Değeri", f"{pred:,.0f} TL")
+            c2.metric("Hızlı Satış Bandı", f"{alt:,.0f} TL")
+            c3.metric("Üst Bant", f"{ust:,.0f} TL")
 
-        if st.session_state.actual_price > 0:
-            actual = st.session_state.actual_price
-            fark = ai - actual
-            yuzde = (fark / ai) * 100
             if fark > 0:
-                st.info(f"Bu ilan tahmini değere göre **%{yuzde:.1f} kelepir**. (İlan: {actual:,.0f} TL)")
+                st.success(f"Bu ilan tahmini değere göre **%{yuzde:.1f} kelepir**. (İlan Fiyatı: {actual:,.0f} TL)")
             else:
-                st.warning(f"Bu ilan tahmini değere göre **%{abs(yuzde):.1f} pahalı**. (İlan: {actual:,.0f} TL)")
-
+                st.warning(f"Bu ilan tahmini değere göre **%{abs(yuzde):.1f} pahalı**. (İlan Fiyatı: {actual:,.0f} TL)")
 # -------------------- TAB 2 --------------------
 with tab2:
     st.subheader("İstanbul Lokasyon Dağılımı")
