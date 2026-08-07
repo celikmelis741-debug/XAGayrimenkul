@@ -139,53 +139,63 @@ if "actual_price" not in st.session_state:
     st.session_state.actual_price = 0
 
 # =========================================================
-# 3. SIDEBAR FİLTRELER
+# 3. SIDEBAR FİLTRELER (Mobil uyumlu - key'li)
 # =========================================================
 st.sidebar.header("Filtreler")
 
-# İlçe seçimi
+# İlçe
 ilce_list = ["Tüm İlçeler"] + sorted(df['İlçe'].unique().tolist())
-selected_ilce = st.sidebar.selectbox("İlçe", ilce_list)
+selected_ilce = st.sidebar.selectbox("İlçe", ilce_list, key="ilce_sec")
 
-# Mahalle seçimi (seçilen ilçeye göre)
+# Mahalle (seçilen ilçeye göre)
 if selected_ilce == "Tüm İlçeler":
-    mahalle_list = ["Tüm Mahalleler"] + sorted(df['Mahalle'].unique().tolist())
+    mahalle_options = sorted(df['Mahalle'].unique().tolist())
 else:
-    mahalle_list = ["Tüm Mahalleler"] + sorted(
-        df[df['İlçe'] == selected_ilce]['Mahalle'].unique().tolist()
-    )
-selected_mahalle = st.sidebar.selectbox("Mahalle", mahalle_list)
+    mahalle_options = sorted(df[df['İlçe'] == selected_ilce]['Mahalle'].unique().tolist())
 
-# Oda düzeni
+mahalle_list = ["Tüm Mahalleler"] + mahalle_options
+selected_mahalle = st.sidebar.selectbox("Mahalle", mahalle_list, key="mahalle_sec")
+
+# Oda Düzeni
 oda_list = ["Tümü"] + sorted(df['Oda Düzeni'].unique().tolist())
-selected_oda = st.sidebar.selectbox("Oda Düzeni", oda_list)
+selected_oda = st.sidebar.selectbox("Oda Düzeni", oda_list, key="oda_sec")
 
-# m² ve bütçe
+# m²
 min_m2, max_m2 = int(df['m² (Brüt)'].min()), int(df['m² (Brüt)'].max())
-m2_range = st.sidebar.slider("Brüt m²", min_m2, max_m2, (60, 180))
+m2_range = st.sidebar.slider("Brüt m²", min_m2, max_m2, (60, 180), key="m2_sec")
 
+# Bütçe
 max_price = int(df['Fiyat'].max())
-budget = st.sidebar.number_input("Maksimum Bütçe (TL)", 1_000_000, max_price, min(12_000_000, max_price), 500_000)
+budget = st.sidebar.number_input(
+    "Maksimum Bütçe (TL)",
+    min_value=1_000_000,
+    max_value=max_price,
+    value=min(12_000_000, max_price),
+    step=500_000,
+    key="butce_sec"
+)
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("Özellik Filtreleri")
 
-f_havuz = st.sidebar.checkbox("Havuzlu")
-f_site = st.sidebar.checkbox("Site İçinde")
-f_asansor = st.sidebar.checkbox("Asansörlü")
-f_balkon = st.sidebar.checkbox("Balkonlu")
-f_sifir = st.sidebar.checkbox("Sıfır / Yeni")
-f_dubleks = st.sidebar.checkbox("Dubleks")
-f_otopark = st.sidebar.checkbox("Otoparklı")
-f_manzara = st.sidebar.checkbox("Manzaralı")
+f_havuz = st.sidebar.checkbox("Havuzlu", key="f_havuz")
+f_site = st.sidebar.checkbox("Site İçinde", key="f_site")
+f_asansor = st.sidebar.checkbox("Asansörlü", key="f_asansor")
+f_balkon = st.sidebar.checkbox("Balkonlu", key="f_balkon")
+f_sifir = st.sidebar.checkbox("Sıfır / Yeni", key="f_sifir")
+f_dubleks = st.sidebar.checkbox("Dubleks", key="f_dubleks")
+f_otopark = st.sidebar.checkbox("Otoparklı", key="f_otopark")
+f_manzara = st.sidebar.checkbox("Manzaralı", key="f_manzara")
 
-# Filtreleme
+# ----- FİLTRELEME -----
 filtered = df.copy()
 
 if selected_ilce != "Tüm İlçeler":
     filtered = filtered[filtered['İlçe'] == selected_ilce]
+
 if selected_mahalle != "Tüm Mahalleler":
     filtered = filtered[filtered['Mahalle'] == selected_mahalle]
+
 if selected_oda != "Tümü":
     filtered = filtered[filtered['Oda Düzeni'] == selected_oda]
 
@@ -195,14 +205,22 @@ filtered = filtered[
     (filtered['Fiyat'] <= budget)
 ]
 
-if f_havuz: filtered = filtered[filtered['havuz'] == 1]
-if f_site: filtered = filtered[filtered['site'] == 1]
-if f_asansor: filtered = filtered[filtered['asansor'] == 1]
-if f_balkon: filtered = filtered[filtered['balkon'] == 1]
-if f_sifir: filtered = filtered[filtered['sifir'] == 1]
-if f_dubleks: filtered = filtered[filtered['dubleks'] == 1]
-if f_otopark: filtered = filtered[filtered['otopark'] == 1]
-if f_manzara: filtered = filtered[filtered['manzara'] == 1]
+if f_havuz:
+    filtered = filtered[filtered['havuz'] == 1]
+if f_site:
+    filtered = filtered[filtered['site'] == 1]
+if f_asansor:
+    filtered = filtered[filtered['asansor'] == 1]
+if f_balkon:
+    filtered = filtered[filtered['balkon'] == 1]
+if f_sifir:
+    filtered = filtered[filtered['sifir'] == 1]
+if f_dubleks:
+    filtered = filtered[filtered['dubleks'] == 1]
+if f_otopark:
+    filtered = filtered[filtered['otopark'] == 1]
+if f_manzara:
+    filtered = filtered[filtered['manzara'] == 1]
 
 # =========================================================
 # 4. TABLAR
@@ -220,7 +238,8 @@ with tab1:
     st.subheader("Akıllı Arama (Doğal Dil)")
     arama = st.text_input(
         "Ne arıyorsunuz?",
-        placeholder="Örnek: havuzlu site içi 3+1, asansörlü balkonlu sıfır, manzaralı dubleks"
+        placeholder="Örnek: havuzlu site içi 3+1, asansörlü balkonlu sıfır, manzaralı dubleks",
+        key="akilli_arama"
     )
 
     def akilli_filtrele(dataframe, metin):
@@ -281,9 +300,9 @@ with tab1:
         st.divider()
         st.subheader("Listeden İlan Seçerek Değerle")
 
-        selected_title = st.selectbox("İlan seçin", filtered['İlan Başlığı'].tolist())
+        selected_title = st.selectbox("İlan seçin", filtered['İlan Başlığı'].tolist(), key="ilan_sec")
 
-        if st.button("Seçili İlanı Analiz Et", type="primary"):
+        if st.button("Seçili İlanı Analiz Et", type="primary", key="analiz_btn"):
             house = filtered[filtered['İlan Başlığı'] == selected_title].iloc[0]
 
             input_data = pd.DataFrame([{
@@ -410,15 +429,15 @@ with tab4:
 
     col1, col2 = st.columns(2)
     with col1:
-        tutar = st.number_input("Konut Değeri (TL)", value=float(st.session_state.ai_price), step=100000.0)
-        banka = st.selectbox("Banka", list(bankalar.keys()))
+        tutar = st.number_input("Konut Değeri (TL)", value=float(st.session_state.ai_price), step=100000.0, key="kredi_tutar")
+        banka = st.selectbox("Banka", list(bankalar.keys()), key="banka_sec")
         if banka == "Özel Parametre Gir":
-            faiz = st.number_input("Aylık Faiz (%)", 0.1, 10.0, 2.79, 0.01)
+            faiz = st.number_input("Aylık Faiz (%)", 0.1, 10.0, 2.79, 0.01, key="faiz_sec")
         else:
             faiz = bankalar[banka]
             st.info(f"**{banka}** | Aylık Faiz: **%{faiz}**")
-        pesinat = st.slider("Peşinat Oranı (%)", 10, 90, 20, 5)
-        vade = st.selectbox("Vade (Ay)", [60, 84, 96, 120, 180, 240], index=3)
+        pesinat = st.slider("Peşinat Oranı (%)", 10, 90, 20, 5, key="pesinat_sec")
+        vade = st.selectbox("Vade (Ay)", [60, 84, 96, 120, 180, 240], index=3, key="vade_sec")
 
     with col2:
         pesinat_tutar = tutar * (pesinat / 100)
