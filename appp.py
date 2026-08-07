@@ -5,6 +5,7 @@ from catboost import CatBoostRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 import plotly.express as px
+import re
 
 # =========================================================
 # 1. SAYFA AYARLARI + TEMA
@@ -55,23 +56,21 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("XAI Gayrimenkul Değerleme Platformu")
-st.caption("CatBoost tabanlı açıklanabilir yapay zekâ + etiketli filtreleme sistemi")
+st.caption("CatBoost + Etiketli Filtreleme + Akıllı Arama")
 
 # =========================================================
 # 2. VERİ VE MODEL
 # =========================================================
-EXCEL_FILE = "ilanlar_oda_salon_rakam.xlsx"   # Yeni dosya
+EXCEL_FILE = "ilanlar_oda_salon_rakam.xlsx"
 
 @st.cache_resource(show_spinner="Model ve veriler yükleniyor...")
 def load_model_and_data():
     df = pd.read_excel(EXCEL_FILE)
 
-    # Temizlik
     df = df.dropna(subset=['Fiyat', 'm² (Brüt)'])
     df = df[(df['m² (Brüt)'] >= 30) & (df['m² (Brüt)'] <= 500)]
     df = df[df['Fiyat'] <= df['Fiyat'].quantile(0.98)]
 
-    # Eksik etiketleri 0 yap
     etiket_cols = ['havuz', 'otopark', 'balkon', 'manzara', 'site', 'dubleks',
                    'asansor', 'sifir', 'teras', 'bahce', 'guvenlik']
     for col in etiket_cols:
@@ -80,17 +79,12 @@ def load_model_and_data():
         else:
             df[col] = 0
 
-    # Oda ve salon
     df['oda_sayisi'] = pd.to_numeric(df.get('oda_sayisi', 2), errors='coerce').fillna(2)
     df['salon_sayisi'] = pd.to_numeric(df.get('salon_sayisi', 1), errors='coerce').fillna(1)
-
-    # Model için özellikler
-    feature_cols = ['m² (Brüt)', 'oda_sayisi', 'salon_sayisi', 'havuz', 'otopark',
-                    'balkon', 'site', 'dubleks', 'asansor', 'sifir']
-    
-    # Semt bilgisini de ekleyelim
     df['Semt'] = df['Semt / Mahalle'].astype(str)
-    feature_cols.append('Semt')
+
+    feature_cols = ['m² (Brüt)', 'oda_sayisi', 'salon_sayisi', 'havuz', 'otopark',
+                    'balkon', 'site', 'dubleks', 'asansor', 'sifir', 'Semt']
 
     X = df[feature_cols].copy()
     y_log = np.log1p(df['Fiyat'])
@@ -115,10 +109,10 @@ def load_model_and_data():
     mae = mean_absolute_error(y_true, y_pred)
     rmse = np.sqrt(mean_squared_error(y_true, y_pred))
 
-    return model, df, r2, mae, rmse, feature_cols
+    return model, df, r2, mae, rmse
 
 try:
-    model, df, model_r2, model_mae, model_rmse, feature_cols = load_model_and_data()
+    model, df, model_r2, model_mae, model_rmse = load_model_and_data()
 except Exception as e:
     st.error(f"Veri yüklenirken hata: {e}")
     st.stop()
@@ -136,7 +130,6 @@ if "actual_price" not in st.session_state:
 # =========================================================
 st.sidebar.header("Filtreler")
 
-# Klasik filtreler
 semt_list = ["Tüm Bölgeler"] + sorted(df['Semt / Mahalle'].astype(str).unique().tolist())
 selected_semt = st.sidebar.selectbox("Semt / Mahalle", semt_list)
 
@@ -161,7 +154,7 @@ f_dubleks = st.sidebar.checkbox("Dubleks")
 f_otopark = st.sidebar.checkbox("Otoparklı")
 f_manzara = st.sidebar.checkbox("Manzaralı")
 
-# Filtreleme
+# Temel filtreleme
 filtered = df.copy()
 
 if selected_semt != "Tüm Bölgeler":
@@ -196,6 +189,60 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 # -------------------- TAB 1 --------------------
 with tab1:
+
+    # ----- AKILLI ARAMA (Açık Kaynaklı AI) -----
+    st.subheader("Akıllı Arama (Doğal Dil)")
+    arama = st.text_input(
+        "Ne arıyorsunuz?",
+        placeholder="Örnek: havuzlu site içi 3+1, asansörlü balkonlu sıfır, manzaralı dubleks"
+    )
+
+    def akilli_filtrele(dataframe, metin):
+        if not metin or metin.strip() == "":
+            return dataframe
+
+        metin = metin.lower().strip()
+        sonuc = dataframe.copy()
+
+        if "havuz" in metin:
+            sonuc = sonuc[sonuc['havuz'] == 1]
+        if "site" in metin:
+            sonuc = sonuc[sonuc['site'] == 1]
+        if "asansör" in metin or "asansor" in metin:
+            sonuc = sonuc[sonuc['asansor'] == 1]
+        if "balkon" in metin:
+            sonuc = sonuc[sonuc['balkon'] == 1]
+        if "sıfır" in metin or "sifir" in metin or "yeni" in metin:
+            sonuc = sonuc[sonuc['sifir'] == 1]
+        if "dubleks" in metin or "dublex" in metin:
+            sonuc = sonuc[sonuc['dubleks'] == 1]
+        if "otopark" in metin or "garaj" in metin:
+            sonuc = sonuc[sonuc['otopark'] == 1]
+        if "manzara" in metin:
+            sonuc = sonuc[sonuc['manzara'] == 1]
+        if "teras" in metin:
+            sonuc = sonuc[sonuc['teras'] == 1]
+        if "bahçe" in metin or "bahce" in metin:
+            sonuc = sonuc[sonuc['bahce'] == 1]
+
+        # 3+1, 2+1 gibi oda yakalama
+        oda_eslesme = re.search(r'(\d)\s*\+\s*(\d)', metin)
+        if oda_eslesme:
+            oda = int(oda_eslesme.group(1))
+            salon = int(oda_eslesme.group(2))
+            sonuc = sonuc[(sonuc['oda_sayisi'] == oda) & (sonuc['salon_sayisi'] == salon)]
+
+        # Hiçbir etiket tutmazsa başlıktan ara
+        if len(sonuc) == len(dataframe):
+            sonuc = dataframe[dataframe['İlan Başlığı'].str.lower().str.contains(metin, na=False)]
+
+        return sonuc
+
+    if arama:
+        filtered = akilli_filtrele(filtered, arama)
+        st.success(f"Akıllı arama sonucu: **{len(filtered)}** ilan bulundu")
+
+    # ----- İLAN LİSTESİ -----
     st.subheader(f"Filtrelenen İlanlar ({len(filtered)} adet)")
 
     if len(filtered) == 0:
@@ -235,7 +282,7 @@ with tab1:
             st.session_state.actual_price = house['Fiyat']
             st.session_state.prediction_done = True
 
-    # Sonuç
+    # Sonuç gösterimi
     if st.session_state.prediction_done:
         ai = st.session_state.ai_price
         alt, ust = ai * 0.93, ai * 1.07
@@ -259,7 +306,6 @@ with tab1:
 with tab2:
     st.subheader("İstanbul Lokasyon Dağılımı")
 
-    # Basit koordinatlar (genişletilebilir)
     coords = {
         'Ataşehir': (40.9833, 29.1167), 'Kadıköy': (40.9903, 29.0275), 'Üsküdar': (41.0244, 29.0050),
         'Beşiktaş': (41.0422, 29.0067), 'Şişli': (41.0600, 28.9870), 'Bakırköy': (40.9800, 28.8700),
@@ -303,7 +349,6 @@ with tab3:
 
     try:
         importance = model.get_feature_importance()
-        # Son özellik Semt olduğu için isimleri ayarlıyoruz
         names = ['m² (Brüt)', 'Oda', 'Salon', 'Havuz', 'Otopark', 'Balkon',
                  'Site', 'Dubleks', 'Asansör', 'Sıfır', 'Semt']
         f_df = pd.DataFrame({'Öznitelik': names[:len(importance)], 'Önem': importance}).sort_values('Önem')
