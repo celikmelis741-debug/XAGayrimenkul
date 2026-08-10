@@ -233,19 +233,67 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 ])
 
 # -------------------- TAB 1 --------------------
+# -------------------- TAB 1 --------------------
 with tab1:
     st.subheader("Akıllı Arama")
-    arama = st.text_input("Ne arıyorsunuz?", placeholder="3+1, metroya yakın, Ataşehir...", key="arama")
+    arama = st.text_input(
+        "Ne arıyorsunuz?",
+        placeholder="metroya yakın, 3+1, site içi, Ataşehir...",
+        key="arama"
+    )
+
+    def akilli_arama(dataframe, metin):
+        if not metin or not metin.strip():
+            return dataframe
+
+        metin = metin.lower().strip()
+        sonuc = dataframe.copy()
+
+        # Eş anlamlı / genişletilmiş kelimeler
+        genisletmeler = {
+            "metro": ["metro", "metrobüs", "metrobus"],
+            "metroya": ["metro", "metrobüs", "metrobus"],
+            "metroya yakın": ["metro", "metrobüs", "metrobus"],
+            "ulaşım": ["ulaşım", "ulasim", "otobüs", "otobus", "dolmuş"],
+            "ulaşıma": ["ulaşım", "ulasim", "otobüs", "otobus"],
+            "market": ["market", "çarşı", "carsi", "avm", "migros", "a101", "bim", "bım"],
+            "markete": ["market", "çarşı", "carsi", "avm", "migros", "a101", "bim"],
+            "site": ["site", "site içi", "site icinde", "site içinde"],
+            "site içi": ["site", "site içi", "site içinde"],
+            "otopark": ["otopark", "garaj", "kapalı otopark"],
+            "havuz": ["havuz", "yüzme havuzu"],
+            "sıfır": ["sıfır", "sifir", "yeni bina", "projeden"],
+            "sifir": ["sıfır", "sifir", "yeni bina", "projeden"],
+            "manzara": ["manzara", "deniz", "boğaz", "bogaz"],
+            "asansör": ["asansör", "asansor"],
+            "asansor": ["asansör", "asansor"],
+        }
+
+        # Arama terimlerini belirle
+        arama_terimleri = [metin]
+        for anahtar, degerler in genisletmeler.items():
+            if anahtar in metin:
+                arama_terimleri.extend(degerler)
+
+        arama_terimleri = list(set(arama_terimleri))  # tekrarsız
+
+        # Başlık + İlçe + Mahalle + Oda + Özelliklerde ara
+        def eslesiyor(row):
+            baslik = str(row['İlan Başlığı']).lower()
+            ilce = str(row['İlçe']).lower()
+            mahalle = str(row['Mahalle']).lower()
+            oda = str(row['Oda Düzeni']).lower()
+            ozellik_text = " ".join(row['Ozellikler']).lower() if isinstance(row['Ozellikler'], list) else ""
+
+            birlesik = f"{baslik} {ilce} {mahalle} {oda} {ozellik_text}"
+
+            return any(terim in birlesik for terim in arama_terimleri)
+
+        mask = sonuc.apply(eslesiyor, axis=1)
+        return sonuc[mask]
 
     if arama:
-        metin = arama.lower().strip()
-        mask = (
-            filtered['İlan Başlığı'].str.lower().str.contains(metin, na=False) |
-            filtered['İlçe'].str.lower().str.contains(metin, na=False) |
-            filtered['Mahalle'].str.lower().str.contains(metin, na=False) |
-            filtered['Oda Düzeni'].str.contains(metin, na=False)
-        )
-        filtered = filtered[mask]
+        filtered = akilli_arama(filtered, arama)
         st.success(f"**{len(filtered)}** ilan bulundu")
 
     st.subheader(f"Filtrelenen İlanlar ({len(filtered)} adet)")
@@ -257,10 +305,10 @@ with tab1:
         show_cols = ['İlan Başlığı', 'İlçe', 'Mahalle', 'Oda Düzeni', 'm² (Brüt)', 'Fiyat']
         st.dataframe(
             filtered[show_cols].head(40).style.format({'Fiyat': '{:,.0f} TL', 'm² (Brüt)': '{:.0f}'}),
-            use_container_width=True, height=280
+            use_container_width=True,
+            height=280
         )
 
-        # Seçilen ilanın özelliklerini göster
         st.divider()
         st.subheader("İlan Özelliklerini Gör")
         secilen = st.selectbox("İlan seçin", filtered['İlan Başlığı'].head(40).tolist(), key="ilan_ozellik_sec")
