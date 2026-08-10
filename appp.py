@@ -23,6 +23,7 @@ st.markdown("""
     .stApp { background-color: #0B0F19; color: #E2E8F0; }
     h1, h2, h3, h4 { color: #F8FAFC !important; font-weight: 600 !important; }
     
+    /* Metrik Kartları */
     div[data-testid="stMetric"] {
         background: #111827;
         border: 1px solid #1F2937;
@@ -34,11 +35,13 @@ st.markdown("""
         color: #3B82F6 !important; font-weight: 700 !important; font-size: 1.35rem !important;
     }
     
+    /* Sol Menü */
     section[data-testid="stSidebar"] {
         background-color: #0F172A;
         border-right: 1px solid #1E293B;
     }
     
+    /* Buton Tasarımı */
     .stButton > button {
         background-color: #2563EB;
         color: white;
@@ -52,6 +55,7 @@ st.markdown("""
         background-color: #1D4ED8;
     }
 
+    /* Özel Kart Alanları */
     .content-card {
         background-color: #111827;
         border: 1px solid #1F2937;
@@ -139,17 +143,6 @@ def load_model_and_data():
     df['oda_sayisi'] = pd.to_numeric(df['oda_sayisi'], errors='coerce').fillna(2).astype(int)
     df['salon_sayisi'] = pd.to_numeric(df['salon_sayisi'], errors='coerce').fillna(1).astype(int)
     df['Oda Düzeni'] = df['oda_sayisi'].astype(str) + '+' + df['salon_sayisi'].astype(str)
-
-    # LINK / URL SÜTUNU OTOMATİK TESPİTİ
-    link_col = None
-    for col in df.columns:
-        if col.lower() in ['link', 'url', 'ilan_linki', 'ilan_url', 'sahibinden_link', 'web_site']:
-            link_col = col
-            break
-    if link_col:
-        df['İlan Bağlantısı'] = df[link_col].astype(str)
-    else:
-        df['İlan Bağlantısı'] = "https://www.sahibinden.com"
 
     if 'İl' in df.columns:
         df['İl'] = df['İl'].fillna('İstanbul').astype(str)
@@ -268,6 +261,7 @@ if menu_secim == "İlan Arama ve Filtreleme":
 
     st.markdown("<br>", unsafe_allow_html=True)
 
+    # MOBİL UYUMLU DARALTILMIŞ FİLTRE PANELİ (VARSAYILAN: KAPALI)
     with st.expander("Filtreleri Göster / Gizle", expanded=False):
         if st.button("Filtre Seçimlerini Sıfırla"):
             st.session_state["f_il"] = "Önce İl Seçiniz"
@@ -347,6 +341,7 @@ if menu_secim == "İlan Arama ve Filtreleme":
             f_guvenlik = st.checkbox("Güvenlik Hizmeti", key="c_guvenlik")
             f_sifir = st.checkbox("Sıfır / Yeni Bina", key="c_sifir")
 
+    # FİLTRE DEĞERLERİNİ UYGULAMA (SESSION STATE KONTROLÜ)
     selected_il = st.session_state.get("f_il", "Önce İl Seçiniz")
     selected_ilce = st.session_state.get("f_ilce", "Önce İl Seçiniz")
     selected_mahalle = st.session_state.get("f_mahalle", "Önce İlçe Seçiniz")
@@ -406,24 +401,17 @@ if menu_secim == "İlan Arama ve Filtreleme":
     else:
         show_df = filtered.head(40).copy()
         show_df['m² Birim Fiyatı'] = show_df['fiyat_m2'].apply(lambda x: f"{x:,.0f} TL")
-        show_cols = ['İlan Başlığı', 'İlçe', 'Mahalle', 'Oda Düzeni', 'm² (Brüt)', 'm² Birim Fiyatı', 'Fiyat', 'İlan Bağlantısı']
+        show_cols = ['İlan Başlığı', 'İlçe', 'Mahalle', 'Oda Düzeni', 'm² (Brüt)', 'm² Birim Fiyatı', 'Fiyat']
         
         event = st.dataframe(
             show_df[show_cols].style.format({'Fiyat': '{:,.0f} TL', 'm² (Brüt)': '{:.0f}'}),
-            column_config={
-                "İlan Bağlantısı": st.column_config.LinkColumn(
-                    "İlan Linki",
-                    help="Sahibinden.com üzerindeki orijinal ilana gitmek için tıklayınız",
-                    display_text="İlana Git"
-                )
-            },
             use_container_width=True, height=300,
             on_select="rerun", selection_mode="single-row", key="df_selection"
         )
 
         export_df = filtered.copy()
         export_df['m² Birim Fiyatı'] = export_df['fiyat_m2'].apply(lambda x: f"{x:,.0f} TL")
-        export_cols = ['İlan Başlığı', 'İl', 'İlçe', 'Mahalle', 'Oda Düzeni', 'm² (Brüt)', 'm² Birim Fiyatı', 'Fiyat', 'İlan Bağlantısı']
+        export_cols = ['İlan Başlığı', 'İl', 'İlçe', 'Mahalle', 'Oda Düzeni', 'm² (Brüt)', 'm² Birim Fiyatı', 'Fiyat']
         valid_export_cols = [c for c in export_cols if c in export_df.columns]
         
         csv_data = export_df[valid_export_cols].to_csv(index=False, encoding='utf-8-sig')
@@ -442,9 +430,6 @@ if menu_secim == "İlan Arama ve Filtreleme":
         st.markdown(f"### Seçili Kayıt Detayı: {row['İlan Başlığı']}")
         st.caption(f"Lokasyon: **{row['İl']} / {row['İlçe']} / {row['Mahalle']}** | Tip: **{row['Oda Düzeni']}** | Alan: **{row['m² (Brüt)']} m²** | Satış Bedeli: **{row['Fiyat']:,.0f} TL**")
         
-        # SAHİBİNDEN.COM YÖNLENDİRME BUTONU
-        st.link_button("Sahibinden.com İlan Sayfasına Git", row['İlan Bağlantısı'], type="secondary")
-
         c1, c2, c3 = st.columns(3)
         c1.metric("Toplu Ulaşım Noktası", mesafe_etiket(row['ulasim_mesafe_m']))
         c2.metric("Ticari Merkez / AVM", mesafe_etiket(row['market_mesafe_m']))
@@ -470,7 +455,6 @@ if menu_secim == "İlan Arama ve Filtreleme":
                     st.metric("Satış Bedeli", f"{k_row['Fiyat']:,.0f} TL")
                     st.metric("Birim Fiyat", f"{k_row['fiyat_m2']:,.0f} TL/m²")
                     st.write(f"**Konum:** {k_row['İlçe']} / {k_row['Mahalle']}")
-                    st.link_button("İlanı Aç", k_row['İlan Bağlantısı'])
 
 # =========================================================
 # MODÜL 2: GAYRİMENKUL DEĞERLEME MODÜLÜ
