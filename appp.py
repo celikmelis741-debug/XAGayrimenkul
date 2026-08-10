@@ -65,7 +65,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("XAI Gayrimenkul Değerleme Platformu")
-st.caption("CatBoost + Ulaşım / Konfor Mesafeli ve Gelişmiş Özellikli Değerleme")
+st.caption("CatBoost (Quantile Regression) + Gelişmiş Öznitelik Mühendisliği & Mesafeli Değerleme")
 
 # =========================================================
 # 2. VERİ VE MODEL
@@ -115,7 +115,7 @@ def basliktan_ozellik_cikar(baslik):
 
     return oz
 
-@st.cache_resource(show_spinner="Model ve veriler yükleniyor...")
+@st.cache_resource(show_spinner="Modeller eğitiliyor ve veri hazırlanıyor...")
 def load_model_and_data():
     df = pd.read_excel(EXCEL_FILE)
     df = df.dropna(subset=['Fiyat', 'm² (Brüt)'])
@@ -126,6 +126,11 @@ def load_model_and_data():
     df['Mahalle'] = df['Mahalle'].fillna('Bilinmiyor').astype(str)
     df['Semt'] = df['Semt / Mahalle'].astype(str)
 
+    # 1. ADIM GELİŞTİRMESİ: ÖZNİTELİK MÜHENDİSLİĞİ (FEATURE ENGINEERING)
+    df['fiyat_m2'] = df['Fiyat'] / df['m² (Brüt)'] # m² birim fiyatı
+    df['toplam_oda'] = df['oda_sayisi'] + df['salon_sayisi']
+    df['m2_per_oda'] = df['m² (Brüt)'] / df['toplam_oda'].clip(lower=1) # Oda başı ferahlık m²'si
+
     for col in ['ulasim_mesafe_m', 'market_mesafe_m', 'hastane_mesafe_m', 'okul_mesafe_m', 'taksi_mesafe_m', 'metro_mesafe_m']:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(9999).astype(int)
@@ -134,27 +139,48 @@ def load_model_and_data():
 
     df['Ozellikler'] = df['İlan Başlığı'].apply(basliktan_ozellik_cikar)
 
-    feature_cols = ['m² (Brüt)', 'oda_sayisi', 'salon_sayisi', 'Semt']
+    feature_cols = ['m² (Brüt)', 'oda_sayisi', 'salon_sayisi', 'm2_per_oda', 'Semt']
     X = df[feature_cols].copy()
     y_log = np.log1p(df['Fiyat'])
     X['Semt'] = X['Semt'].astype(str)
 
     X_train, X_test, y_train, y_test = train_test_split(X, y_log, test_size=0.2, random_state=42)
-    model = CatBoostRegressor(
+    
+    # Ana Tahmin Modeli (Ortanca / Median)
+    model_mid = CatBoostRegressor(
         iterations=600, learning_rate=0.05, depth=6,
         cat_features=['Semt'], verbose=0, random_seed=42
     )
-    model.fit(X_train, y_train)
+    model_mid.fit(X_train, y_train)
 
-    y_pred = np.expm1(model.predict(X_test))
+    # 1. ADIM GELİŞTİRMESİ: CATBOOST QUANTILE REGRESSION (GÜVEN ARALIĞI)
+    # Alt Bant Modeli (%10 Quantile)
+    model_low = CatBoostRegressor(
+        iterations=600, learning_rate=0.05, depth=6,
+        loss_function='Quantile:alpha=0.10',
+        cat_features=['Semt'], verbose=0, random_seed=42
+    )
+    model_low.fit(X_train, y_train)
+
+    # Üst Bant Modeli (%90 Quantile)
+    model_high = CatBoostRegressor(
+        iterations=600, learning_rate=0.05, depth=6,
+        loss_function='Quantile:alpha=0.90',
+        cat_features=['Semt'], verbose=0, random_seed=42
+    )
+    model_high.fit(X_train, y_train)
+
+    y_pred = np.expm1(model_mid.predict(X_test))
     y_true = np.expm1(y_test)
     r2 = r2_score(y_true, y_pred)
     mae = mean_absolute_error(y_true, y_pred)
     rmse = np.sqrt(mean_squared_error(y_true, y_pred))
-    return model, df, r2, mae, rmse
+
+    return (model_mid, model_low, model_high), df, r2, mae, rmse
 
 try:
-    model, df, model_r2, model_mae, model_rmse = load_model_and_data()
+    models, df, model_r2, model_mae, model_rmse = load_model_and_data()
+    model_mid, model_low, model_high = models
 except Exception as e:
     st.error(f"Veri yüklenirken hata: {e}")
     st.stop()
@@ -292,9 +318,9 @@ with tab1:
         show_df = filtered.head(40).copy()
         show_df['Ulaşım'] = show_df['ulasim_mesafe_m'].apply(lambda x: f"~{x}m")
         show_df['Market'] = show_df['market_mesafe_m'].apply(lambda x: f"~{x}m")
-        show_cols = ['İlan Başlığı', 'İlçe', 'Oda Düzeni', 'm² (Brüt)', 'Ulaşım', 'Market', 'Fiyat']
+        show_df['m² Birim Fiyatı'] = show_df['fiyat_m2'].apply(lambda x: f"{x:,.0f} TL")
+        show_cols = ['İlan Başlığı', 'İlçe', 'Oda Düzeni', 'm² (Brüt)', 'm² Birim Fiyatı', 'Ulaşım', 'Market', 'Fiyat']
         
-        # Tablodan doğrudan tıklama kontrolü
         event = st.dataframe(
             show_df[show_cols].style.format({'Fiyat': '{:,.0f} TL', 'm² (Brüt)': '{:.0f}'}),
             use_container_width=True, height=300,
@@ -312,11 +338,11 @@ with tab1:
             selected_idx = selected_rows[0]
             row = show_df.iloc[selected_idx]
         else:
-            row = show_df.iloc[0] # Varsayılan olarak ilk ilanı göster
+            row = show_df.iloc[0]
             st.info("💡 Tablodan başka bir satıra tıklayarak o ilanın detayını inceleyebilirsiniz.")
 
         st.markdown(f"**{row['İlan Başlığı']}**")
-        st.caption(f"{row['İlçe']} / {row['Mahalle']}  |  {row['Oda Düzeni']}  |  {row['m² (Brüt)']} m²  |  {row['Fiyat']:,.0f} TL")
+        st.caption(f"{row['İlçe']} / {row['Mahalle']}  |  {row['Oda Düzeni']}  |  {row['m² (Brüt)']} m²  |  Birim: {row['fiyat_m2']:,.0f} TL/m²  |  İlan Fiyatı: {row['Fiyat']:,.0f} TL")
 
         st.markdown("#### Yakınlık (yaklaşık)")
         c1, c2, c3 = st.columns(3)
@@ -359,33 +385,43 @@ with tab2:
         semt_degeri = benzer.iloc[0] if len(benzer) > 0 else s_ilce
         ilce_df = df[df['İlçe'] == s_ilce]
 
+        toplam_o = s_oda + s_salon
+        m2_per_o = s_brut / max(toplam_o, 1)
+
         input_data = pd.DataFrame([{
             'm² (Brüt)': s_brut,
             'oda_sayisi': float(s_oda),
             'salon_sayisi': float(s_salon),
+            'm2_per_oda': m2_per_o,
             'Semt': semt_degeri
         }])
-        pred = float(np.expm1(model.predict(input_data)[0]))
-        
-        # Özellik Prim Oranları
-        if s_site: pred *= 1.04
-        if s_havuz: pred *= 1.03
-        if s_otopark: pred *= 1.02
-        if s_ebeveyn: pred *= 1.02
-        if s_sifir: pred *= 1.05
 
-        # Ulaşım Yakınlık Primi
+        # QUANTILE MODEL TAHMİNLERİ
+        pred_mid = float(np.expm1(model_mid.predict(input_data)[0]))
+        pred_low = float(np.expm1(model_low.predict(input_data)[0]))
+        pred_high = float(np.expm1(model_high.predict(input_data)[0]))
+        
+        # Özellik Prim Oranları Entegrasyonu
+        multiplier = 1.0
+        if s_site: multiplier *= 1.04
+        if s_havuz: multiplier *= 1.03
+        if s_otopark: multiplier *= 1.02
+        if s_ebeveyn: multiplier *= 1.02
+        if s_sifir: multiplier *= 1.05
+
         ulasim_med = ilce_df['ulasim_mesafe_m'].median() if len(ilce_df) else 2000
         if ulasim_med <= 1000:
-            pred *= 1.025
+            multiplier *= 1.025
 
-        hizli, maksimum = pred * 0.93, pred * 1.08
+        pred_mid *= multiplier
+        pred_low *= multiplier
+        pred_high *= multiplier
 
-        st.success("Hesaplama tamamlandı")
+        st.success("Quantile Regression Modeli ile İstatistiksel Hesaplama Tamamlandı")
         m1, m2, m3 = st.columns(3)
-        m1.metric("Tahmini Piyasa Değeri", f"{pred:,.0f} TL")
-        m2.metric("Hızlı Satış", f"{hizli:,.0f} TL", delta="-7%")
-        m3.metric("Maksimum Satış", f"{maksimum:,.0f} TL", delta="+8%")
+        m1.metric("Tahmini Piyasa Değeri (%50)", f"{pred_mid:,.0f} TL")
+        m2.metric("Alt Bant Tahmini (%10 Quantile)", f"{pred_low:,.0f} TL")
+        m3.metric("Üst Bant Tahmini (%90 Quantile)", f"{pred_high:,.0f} TL")
 
         st.markdown("#### Bu ilçede ortalama yakınlık")
         k1, k2, k3, k4 = st.columns(4)
@@ -432,8 +468,8 @@ with tab4:
     st.subheader("Model Açıklanabilirliği")
     st.caption(f"R²: **%{model_r2*100:.2f}** | MAE: {model_mae:,.0f} TL | Veri: {len(df):,}")
     try:
-        importance = model.get_feature_importance()
-        names = ['m² (Brüt)', 'Oda Sayısı', 'Salon Sayısı', 'Semt / İlçe']
+        importance = model_mid.get_feature_importance()
+        names = ['m² (Brüt)', 'Oda Sayısı', 'Salon Sayısı', 'Oda Başı m²', 'Semt / İlçe']
         f_df = pd.DataFrame({'Öznitelik': names[:len(importance)], 'Önem': importance}).sort_values('Önem')
         fig = px.bar(f_df, x='Önem', y='Öznitelik', orientation='h', color='Önem', color_continuous_scale='Blues')
         fig.update_layout(template="plotly_dark", height=380)
