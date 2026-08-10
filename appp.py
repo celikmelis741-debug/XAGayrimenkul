@@ -74,7 +74,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("XAI Gayrimenkul Değerleme Platformu")
-st.caption("CatBoost + Coğrafi Harita Analizi & Quantile Regression")
+st.caption("CatBoost + Coğrafi Harita & Yatırım / Amortisman Analitiği")
 
 # =========================================================
 # 2. VERİ VE MODEL
@@ -462,24 +462,40 @@ with tab2:
         m2.metric("Alt Bant Tahmini (%10 Quantile)", f"{pred_low:,.0f} TL")
         m3.metric("Üst Bant Tahmini (%90 Quantile)", f"{pred_high:,.0f} TL")
 
+        # 5. ADIM GELİŞTİRMESİ: GAYRİMENKUL YATIRIM & AMORTİSMAN (ROI) ANALİTİĞİ
+        st.divider()
+        st.subheader("📈 Yatırım & Kira Getirisi Analitiği (ROI)")
+        
+        # Piyasa ortalaması: İstanbul konut kira çarpanı ortalama 220 ay (18.3 yıl)
+        tahmini_aylik_kira = pred_mid / 220
+        amortisman_yil = pred_mid / (tahmini_aylik_kira * 12)
+        yillik_getiri_yuzde = ( (tahmini_aylik_kira * 12) / pred_mid ) * 100
+
+        y1, y2, y3 = st.columns(3)
+        y1.metric("Tahmini Aylık Kira Getirisi", f"{tahmini_aylik_kira:,.0f} TL/Ay")
+        y2.metric("Amortisman Süresi (Geri Dönüş)", f"{amortisman_yil:.1f} Yıl")
+        y3.metric("Yıllık Brüt Getiri Oranı", f"%{yillik_getiri_yuzde:.2f}")
+
         st.markdown(f"""
         <div class="rapor-kart">
-            <h3>📋 Gayrimenkul Değerleme Rapor Özeti</h3>
+            <h3>📋 Gayrimenkul Değerleme & Yatırım Rapor Özeti</h3>
             <p><strong>Tarih:</strong> {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
             <hr style="border-color: #374151;">
             <p><strong>Konum:</strong> {s_ilce} | <strong>Büyüklük:</strong> {s_brut} m² | <strong>Oda Düzeni:</strong> {s_oda}+{s_salon}</p>
             <p><strong>Seçilen Özellikler:</strong> {', '.join(secilen_ozellikler) if secilen_ozellikler else 'Standart Özellikler'}</p>
             <br>
-            <h4>💰 Yapay Zeka Fiyat Aralığı</h4>
+            <h4>💰 Yapay Zeka Fiyat & Yatırım Metrikleri</h4>
             <ul>
-                <li><strong>Tahmini Piyasa Değeri:</strong> {pred_mid:,.0f} TL</li>
+                <li><strong>Tahmini Piyasa Satış Değeri:</strong> {pred_mid:,.0f} TL</li>
                 <li><strong>Hızlı Satış Bandı (%10 Alt Bant):</strong> {pred_low:,.0f} TL</li>
                 <li><strong>Maksimum Satış Bandı (%90 Üst Bant):</strong> {pred_high:,.0f} TL</li>
+                <li><strong>Tahmini Kira Potansiyeli:</strong> {tahmini_aylik_kira:,.0f} TL / Ay</li>
+                <li><strong>Geri Dönüş (Amortisman) Süresi:</strong> ~{amortisman_yil:.1f} Yıl</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
 
-# -------------------- TAB 3 (GELİŞTİRME: İNTERAKTİF HARİTA) --------------------
+# -------------------- TAB 3 --------------------
 with tab3:
     st.subheader("📍 İstanbul Gayrimenkul İlanları Haritası")
     st.caption("Filtrelenen ilanların coğrafi dağılımı. Nokta büyüklüğü m²'yi, renk tonu fiyatı gösterir.")
