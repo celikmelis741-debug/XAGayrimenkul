@@ -10,11 +10,10 @@ import re
 from datetime import datetime
 
 # =========================================================
-# 1. SAYFA AYARLARI + GELİŞMİŞ ŞIK TEMA (CSS)
+# 1. SAYFA AYARLARI VE KURUMSAL TEMA (CSS)
 # =========================================================
 st.set_page_config(
-    page_title="XAI Gayrimenkul Platformu",
-    page_icon="🏠",
+    page_title="Gayrimenkul Değerleme ve Analiz Platformu",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -22,22 +21,21 @@ st.set_page_config(
 st.markdown("""
 <style>
     .stApp { background-color: #0B0F19; color: #E2E8F0; }
-    h1, h2, h3 { color: #F8FAFC !important; font-weight: 600 !important; }
+    h1, h2, h3, h4 { color: #F8FAFC !important; font-weight: 600 !important; }
     
     /* Metrik Kartları */
     div[data-testid="stMetric"] {
-        background: linear-gradient(135deg, #111827 0%, #1F2937 100%);
-        border: 1px solid #374151;
-        border-radius: 12px;
+        background: #111827;
+        border: 1px solid #1F2937;
+        border-radius: 8px;
         padding: 16px 20px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
     }
-    div[data-testid="stMetric"] label { color: #94A3B8 !important; font-size: 0.9rem; font-weight: 500; }
+    div[data-testid="stMetric"] label { color: #94A3B8 !important; font-size: 0.85rem; font-weight: 500; }
     div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
-        color: #60A5FA !important; font-weight: 700 !important; font-size: 1.4rem !important;
+        color: #3B82F6 !important; font-weight: 700 !important; font-size: 1.35rem !important;
     }
     
-    /* Sol Menü Styling */
+    /* Sol Menü */
     section[data-testid="stSidebar"] {
         background-color: #0F172A;
         border-right: 1px solid #1E293B;
@@ -45,24 +43,23 @@ st.markdown("""
     
     /* Buton Tasarımı */
     .stButton > button {
-        background: linear-gradient(90deg, #2563EB 0%, #1D4ED8 100%);
+        background-color: #2563EB;
         color: white;
-        border-radius: 10px;
+        border-radius: 6px;
         border: none;
         font-weight: 600;
         padding: 10px 20px;
         width: 100%;
-        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
     }
     .stButton > button:hover {
-        background: linear-gradient(90deg, #1D4ED8 0%, #1E40AF 100%);
+        background-color: #1D4ED8;
     }
 
-    /* Özel Kart Kutuları */
+    /* Özel Kart Alanları */
     .content-card {
         background-color: #111827;
         border: 1px solid #1F2937;
-        border-radius: 14px;
+        border-radius: 8px;
         padding: 20px;
         margin-bottom: 20px;
     }
@@ -71,15 +68,15 @@ st.markdown("""
         background: #1E3A5F;
         color: #93C5FD;
         padding: 4px 12px;
-        border-radius: 20px;
+        border-radius: 4px;
         font-size: 0.82rem;
         margin: 3px 4px;
         border: 1px solid #2B4C7E;
     }
     .rapor-kart {
-        background: linear-gradient(135deg, #111827 0%, #0F172A 100%);
+        background-color: #111827;
         border: 1px solid #3B82F6;
-        border-radius: 14px;
+        border-radius: 8px;
         padding: 20px;
         margin-top: 15px;
     }
@@ -99,7 +96,7 @@ TURKIYE_ILLERI = [
 ]
 
 # =========================================================
-# 2. VERİ VE MODEL
+# 2. VERİ VE MODEL HAZIRLIĞI
 # =========================================================
 EXCEL_FILE = "ilanlar_mesafeli.xlsx"
 
@@ -140,7 +137,7 @@ def basliktan_ozellik_cikar(baslik):
         oz.append("Isıtma Sistemi")
     return oz
 
-@st.cache_resource(show_spinner="Modeller eğitiliyor ve veri hazırlanıyor...")
+@st.cache_resource(show_spinner="Veri seti ve algoritmalar yükleniyor...")
 def load_model_and_data():
     df = pd.read_excel(EXCEL_FILE)
     df = df.dropna(subset=['Fiyat', 'm² (Brüt)'])
@@ -218,58 +215,58 @@ try:
     models, df, model_r2, model_mae, model_rmse = load_model_and_data()
     model_mid, model_low, model_high = models
 except Exception as e:
-    st.error(f"Veri yüklenirken hata: {e}")
+    st.error(f"Veri yüklenirken hata oluştu: {e}")
     st.stop()
 
 def mesafe_etiket(m):
-    if m <= 800: return f"~{m} m (çok yakın)"
-    if m <= 1500: return f"~{m} m (yakın)"
-    if m <= 3000: return f"~{m} m (orta)"
-    return f"~{m} m (uzak)"
+    if m <= 800: return f"~{m} m (Çok Yakın)"
+    if m <= 1500: return f"~{m} m (Yakın)"
+    if m <= 3000: return f"~{m} m (Orta Mesafede)"
+    return f"~{m} m (Uzak)"
 
 def has_ozellik(lst, aranan):
     return any(aranan.lower() in o.lower() for o in lst)
 
 # =========================================================
-# 3. SOL MENÜ (NAVİGASYON)
+# 3. KONTROL PANELİ / SOL MENÜ
 # =========================================================
-st.sidebar.markdown("## 🏢 Gayrimenkul Portalı")
-st.sidebar.caption("Yapay Zeka Destekli Değerleme")
+st.sidebar.markdown("## Navigasyon Paneli")
+st.sidebar.caption("İşlem Modu Seçimi")
 
 menu_secim = st.sidebar.radio(
-    "Uygulama Modu Seçin:",
+    "Görüntülenecek Modülü Seçiniz:",
     [
-        "🔎 İlan Arama & Filtreleme",
-        "💰 Evimi Ne Kadara Satarım?",
-        "📍 Harita İle Keşfet",
-        "🏦 Konut Kredisi Hesaplama",
-        "📊 Piyasa & Model Analitiği"
+        "İlan Arama ve Filtreleme",
+        "Gayrimenkul Değerleme Modülü",
+        "Coğrafi Harita Analizi",
+        "Konut Kredisi Simülasyonu",
+        "Model ve Piyasa Analitiği"
     ],
     index=0
 )
 
 st.sidebar.markdown("---")
-st.sidebar.info("💡 **İpucu:** Sol menüden yapmak istediğiniz işlemi seçerek doğrudan ilgili moda geçebilirsiniz.")
 
 # =========================================================
-# SAYFA 1: 🔎 İLAN ARAMA & FİLTRELEME
+# MODÜL 1: İLAN ARAMA VE FİLTRELEME
 # =========================================================
-if menu_secim == "🔎 İlan Arama & Filtreleme":
-    st.title("🔎 Piyasa İlanları & Akıllı Arama")
-    
-    # KPI Kartları (Sayfa zenginleştirme)
+if menu_secim == "İlan Arama ve Filtreleme":
+    st.title("Piyasa İlanları ve Filtreleme Paneli")
+    st.caption("Aktif veritabanındaki gayrimenkul ilanlarını kriterlerinize göre sorgulayabilirsiniz.")
+
+    # KPI Kartları
     kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-    kpi1.metric("Toplam Aktif İlan", f"{len(df):,} Adet")
-    kpi2.metric("Ortalama İlan Fiyatı", f"{df['Fiyat'].mean():,.0f} TL")
-    kpi3.metric("Ortalama m² Birim Fiyatı", f"{df['fiyat_m2'].mean():,.0f} TL")
-    kpi4.metric("Ortalama Konut Büyüklüğü", f"{df['m² (Brüt)'].mean():.0f} m²")
+    kpi1.metric("Toplam Kayıtlı İlan", f"{len(df):,} Adet")
+    kpi2.metric("Ortalama İlan Bedeli", f"{df['Fiyat'].mean():,.0f} TL")
+    kpi3.metric("Ortalama Birim Fiyat (m²)", f"{df['fiyat_m2'].mean():,.0f} TL")
+    kpi4.metric("Ortalama Konut Alanı", f"{df['m² (Brüt)'].mean():.0f} m²")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    with st.expander("🛠️ Lokasyon ve Detaylı Filtre Panelini Aç / Kapat", expanded=True):
+    with st.expander("Sorgulama Kriterleri ve Lokasyon Filtreleri", expanded=True):
         f_col1, f_col2, f_col3 = st.columns(3)
         with f_col1:
-            st.markdown("##### 📍 Lokasyon")
+            st.markdown("##### Lokasyon Parametreleri")
             il_options = ["Tüm İller"] + sorted(list(set(TURKIYE_ILLERI + df['İl'].unique().tolist())))
             selected_il = st.selectbox("İl", il_options, index=0, key="f_il")
             ilce_options = sorted(df['İlçe'].unique().tolist()) if selected_il == "Tüm İller" else sorted(df[df['İl'] == selected_il]['İlçe'].unique().tolist())
@@ -278,33 +275,33 @@ if menu_secim == "🔎 İlan Arama & Filtreleme":
             selected_mahalle = st.selectbox("Mahalle", ["Tüm Mahalleler"] + mahalle_options, key="f_mahalle")
 
         with f_col2:
-            st.markdown("##### 🏠 Konut Metrikleri")
-            selected_oda = st.selectbox("Oda Düzeni", ["Tümü"] + sorted(df['Oda Düzeni'].unique().tolist()), key="f_oda")
+            st.markdown("##### Yapı Özellikleri")
+            selected_oda = st.selectbox("Oda Yapısı", ["Tümü"] + sorted(df['Oda Düzeni'].unique().tolist()), key="f_oda")
             min_m2, max_m2 = int(df['m² (Brüt)'].min()), int(df['m² (Brüt)'].max())
-            m2_range = st.slider("Brüt m² Aralığı", min_m2, max_m2, (40, 350), key="f_m2")
+            m2_range = st.slider("Brüt Alan (m²)", min_m2, max_m2, (40, 350), key="f_m2")
             max_price = int(df['Fiyat'].max())
-            budget = st.number_input("Maksimum Bütçe (TL)", 500_000, max_price, min(40_000_000, max_price), 500_000, key="f_butce")
+            budget = st.number_input("Üst Bütçe Limiti (TL)", 500_000, max_price, min(40_000_000, max_price), 500_000, key="f_butce")
 
         with f_col3:
-            st.markdown("##### 🚶 Yakınlık Kriterleri")
-            f_ulasim = st.selectbox("Toplu Ulaşım", ["Tümü", "1.5 km'den yakın", "3 km'den yakın"], key="f_ulasim")
-            f_market = st.selectbox("Market / AVM", ["Tümü", "1.5 km'den yakın"], key="f_market")
-            f_hastane = st.selectbox("Hastane", ["Tümü", "2 km'den yakın"], key="f_hastane")
+            st.markdown("##### Konum ve Yakınlık")
+            f_ulasim = st.selectbox("Toplu Ulaşım Mesafesi", ["Tümü", "1.5 km'den yakın", "3 km'den yakın"], key="f_ulasim")
+            f_market = st.selectbox("Ticari Alan / AVM", ["Tümü", "1.5 km'den yakın"], key="f_market")
+            f_hastane = st.selectbox("Sağlık Kuruluşu", ["Tümü", "2 km'den yakın"], key="f_hastane")
 
-        st.markdown("##### ✨ Ek Konut Özellikleri")
+        st.markdown("##### Ek Nitelikler")
         o1, o2, o3, o4 = st.columns(4)
         with o1:
-            f_site = st.checkbox("Site içinde", key="c_site")
-            f_havuz = st.checkbox("Havuzlu", key="c_havuz")
+            f_site = st.checkbox("Site Yerleşimi", key="c_site")
+            f_havuz = st.checkbox("Yüzme Havuzu", key="c_havuz")
         with o2:
-            f_otopark = st.checkbox("Otoparklı", key="c_otopark")
-            f_ebeveyn = st.checkbox("Ebeveyn Banyolu", key="c_ebeveyn")
+            f_otopark = st.checkbox("Otopark", key="c_otopark")
+            f_ebeveyn = st.checkbox("Ebeveyn Banyosu", key="c_ebeveyn")
         with o3:
-            f_dubleks = st.checkbox("Dubleks", key="c_dubleks")
-            f_bahce = st.checkbox("Bahçeli Kat", key="c_bahce")
+            f_dubleks = st.checkbox("Dubleks Yapı", key="c_dubleks")
+            f_bahce = st.checkbox("Bahçe Katı", key="c_bahce")
         with o4:
-            f_guvenlik = st.checkbox("Güvenlikli", key="c_guvenlik")
-            f_sifir = st.checkbox("Sıfır / Yeni", key="c_sifir")
+            f_guvenlik = st.checkbox("Güvenlik Hizmeti", key="c_guvenlik")
+            f_sifir = st.checkbox("Sıfır / Yeni Bina", key="c_sifir")
 
     # Filtreleme İşlemi
     filtered = df.copy()
@@ -329,7 +326,7 @@ if menu_secim == "🔎 İlan Arama & Filtreleme":
     if f_guvenlik: filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Güvenlik"))]
     if f_sifir: filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Sıfır"))]
 
-    arama = st.text_input("💬 Serbest Kelime İle Arama", placeholder="Örn: 3+1, Kadıköy, metroya yakın, deniz manzaralı...", key="arama_input")
+    arama = st.text_input("Metin Arama (İlan Başlığı / İlçe / Mahalle)", placeholder="Örn: 3+1, Kadıköy, metroya yakın...", key="arama_input")
     if arama:
         metin = arama.lower().strip()
         filtered = filtered[
@@ -338,9 +335,9 @@ if menu_secim == "🔎 İlan Arama & Filtreleme":
             filtered['Mahalle'].str.lower().str.contains(metin, na=False)
         ]
 
-    st.markdown(f"### 📋 Sonuçlar ({len(filtered)} İlan Bulundu)")
+    st.markdown(f"### Sorgulama Sonuçları ({len(filtered)} İlan Listelendi)")
     if len(filtered) == 0:
-        st.warning("Seçtiğiniz kriterlere uygun ilan bulunamadı.")
+        st.warning("Belirtilen parametrelere uygun kayıt bulunamadı.")
     else:
         show_df = filtered.head(40).copy()
         show_df['m² Birim Fiyatı'] = show_df['fiyat_m2'].apply(lambda x: f"{x:,.0f} TL")
@@ -357,24 +354,24 @@ if menu_secim == "🔎 İlan Arama & Filtreleme":
         
         row = show_df.iloc[selected_rows[0]] if selected_rows else show_df.iloc[0]
 
-        st.markdown(f"### 🏡 Seçili İlan Detayı: {row['İlan Başlığı']}")
-        st.caption(f"Konum: **{row['İl']} / {row['İlçe']} / {row['Mahalle']}** | Tip: **{row['Oda Düzeni']}** | Büyüklük: **{row['m² (Brüt)']} m²** | Fiyat: **{row['Fiyat']:,.0f} TL**")
+        st.markdown(f"### Seçili Kayıt Detayı: {row['İlan Başlığı']}")
+        st.caption(f"Lokasyon: **{row['İl']} / {row['İlçe']} / {row['Mahalle']}** | Tip: **{row['Oda Düzeni']}** | Alan: **{row['m² (Brüt)']} m²** | Satış Bedeli: **{row['Fiyat']:,.0f} TL**")
         
         c1, c2, c3 = st.columns(3)
-        c1.metric("Toplu Ulaşım Mesafesi", mesafe_etiket(row['ulasim_mesafe_m']))
-        c2.metric("Market / AVM Mesafesi", mesafe_etiket(row['market_mesafe_m']))
-        c3.metric("Hastane Mesafesi", mesafe_etiket(row['hastane_mesafe_m']))
+        c1.metric("Toplu Ulaşım Noktası", mesafe_etiket(row['ulasim_mesafe_m']))
+        c2.metric("Ticari Merkez / AVM", mesafe_etiket(row['market_mesafe_m']))
+        c3.metric("Sağlık Kuruluşu", mesafe_etiket(row['hastane_mesafe_m']))
 
         ozellikler = row['Ozellikler']
         if ozellikler:
-            st.markdown("**Başlıkta Öne Çıkan Özellikler:**")
+            st.markdown("**Tespit Edilen Yapı Nitelikleri:**")
             etiket_html = " ".join([f'<span class="ozellik-etiket">{o}</span>' for o in ozellikler])
             st.markdown(etiket_html, unsafe_allow_html=True)
 
         st.divider()
-        st.markdown("### ⚖️ İlan Karşılaştırma Modülü")
-        st.caption("Aşağıdaki kutudan kıyaslamak istediğiniz 2 veya 3 ilanı seçebilirsiniz.")
-        secilen_ilanlar = st.multiselect("Karşılaştırılacak İlanlar:", options=show_df['İlan Başlığı'].tolist(), max_selections=3)
+        st.markdown("### İlan Karşılaştırma Modülü")
+        st.caption("Karşılaştırmak istediğiniz kayıtları listeden seçiniz.")
+        secilen_ilanlar = st.multiselect("Seçilen İlanlar:", options=show_df['İlan Başlığı'].tolist(), max_selections=3)
         if len(secilen_ilanlar) >= 2:
             cols = st.columns(len(secilen_ilanlar))
             for idx, baslik in enumerate(secilen_ilanlar):
@@ -382,21 +379,21 @@ if menu_secim == "🔎 İlan Arama & Filtreleme":
                 with cols[idx]:
                     st.markdown(f"#### İlan {idx+1}")
                     st.write(f"**{k_row['İlan Başlığı'][:35]}...**")
-                    st.metric("Fiyat", f"{k_row['Fiyat']:,.0f} TL")
-                    st.metric("m² Birim Fiyatı", f"{k_row['fiyat_m2']:,.0f} TL/m²")
+                    st.metric("Satış Bedeli", f"{k_row['Fiyat']:,.0f} TL")
+                    st.metric("Birim Fiyat", f"{k_row['fiyat_m2']:,.0f} TL/m²")
                     st.write(f"**Konum:** {k_row['İlçe']} / {k_row['Mahalle']}")
 
 # =========================================================
-# SAYFA 2: 💰 EVİMİ NE KADARA SATARIM?
+# MODÜL 2: GAYRİMENKUL DEĞERLEME MODÜLÜ
 # =========================================================
-elif menu_secim == "💰 Evimi Ne Kadara Satarım?":
-    st.title("💰 Evimi Ne Kadara Satarım?")
-    st.caption("CatBoost yapay zeka algoritması ile evinizin tahmini satış değerini ve yatırım metriklerini hesaplayın.")
+elif menu_secim == "Gayrimenkul Değerleme Modülü":
+    st.title("Otomatik Gayrimenkul Değerleme Paneli")
+    st.caption("CatBoost makine öğrenmesi modeli ile taşınmazın tahmini satış değeri ve yatırım geri dönüş süresi hesaplanır.")
 
     st.markdown("""
     <div class="content-card">
-        <h4>📝 Evinizin Bilgilerini Girin</h4>
-        Evinizin konumu, büyüklüğü ve ek niteliklerini eksiksiz doldurarak yapay zeka değerlemesini başlatın.
+        <h4>Taşınmaz Parametre Girişi</h4>
+        Değerlemesi yapılacak taşınmazın fiziksel ve konum bilgilerini giriniz.
     </div>
     """, unsafe_allow_html=True)
 
@@ -405,23 +402,23 @@ elif menu_secim == "💰 Evimi Ne Kadara Satarım?":
         s_il = st.selectbox("İl", sorted(list(set(TURKIYE_ILLERI + df['İl'].unique().tolist()))), index=0, key="val_il")
         s_ilce_options = sorted(df[df['İl'] == s_il]['İlçe'].unique().tolist()) if s_il in df['İl'].values else sorted(df['İlçe'].unique().tolist())
         s_ilce = st.selectbox("İlçe", s_ilce_options, key="val_ilce")
-        s_brut = st.number_input("Brüt m² Büyüklüğü", 30, 800, 120, key="val_brut")
+        s_brut = st.number_input("Brüt Kullanım Alanı (m²)", 30, 800, 120, key="val_brut")
     with col2:
         s_oda = st.selectbox("Oda Sayısı", [1, 2, 3, 4, 5, 6, 7, 8], index=2, key="val_oda")
         s_salon = st.selectbox("Salon Sayısı", [0, 1, 2], index=1, key="val_salon")
 
-    st.markdown("##### 🌟 Bina ve Daire Özellikleri")
+    st.markdown("##### Ek Yapı Nitelikleri")
     sc1, sc2 = st.columns(2)
     with sc1:
-        s_site = st.checkbox("Site içinde yer alıyor", key="v_site")
-        s_havuz = st.checkbox("Yüzme havuzu var", key="v_havuz")
-        s_otopark = st.checkbox("Otopark imkanı var", key="v_otopark")
+        s_site = st.checkbox("Site İçerisinde", key="v_site")
+        s_havuz = st.checkbox("Yüzme Havuzu Mevcut", key="v_havuz")
+        s_otopark = st.checkbox("Kapalı/Açık Otopark Mevcut", key="v_otopark")
     with sc2:
-        s_ebeveyn = st.checkbox("Ebeveyn banyosu var", key="v_ebeveyn")
-        s_sifir = st.checkbox("Sıfır / Yeni bina", key="v_sifir")
+        s_ebeveyn = st.checkbox("Ebeveyn Banyosu Mevcut", key="v_ebeveyn")
+        s_sifir = st.checkbox("Sıfır / Yeni Yapı", key="v_sifir")
 
     st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("🚀 Yapay Zeka Satış Fiyatını Hesapla", type="primary", use_container_width=True):
+    if st.button("Değerleme Raporunu Hesapla", type="primary", use_container_width=True):
         benzer = df[df['İlçe'] == s_ilce]['Semt'].mode()
         semt_degeri = benzer.iloc[0] if len(benzer) > 0 else s_ilce
 
@@ -451,46 +448,46 @@ elif menu_secim == "💰 Evimi Ne Kadara Satarım?":
         pred_low *= multiplier
         pred_high *= multiplier
 
-        st.success("✅ Hesaplama Başarıyla Tamamlandı")
+        st.success("Değerleme Hesaplaması Tamamlandı")
         
         m1, m2, m3 = st.columns(3)
-        m1.metric("Tahmini Piyasa Değeri (%50)", f"{pred_mid:,.0f} TL")
+        m1.metric("Tahmini Piyasa Bedeli (%50)", f"{pred_mid:,.0f} TL")
         m2.metric("Hızlı Satış Alt Bandı (%10)", f"{pred_low:,.0f} TL")
-        m3.metric("Maksimum Üst Satış Bandı (%90)", f"{pred_high:,.0f} TL")
+        m3.metric("Maksimum Satış Bandı (%90)", f"{pred_high:,.0f} TL")
 
         tahmini_aylik_kira = pred_mid / 220
         amortisman_yil = pred_mid / (tahmini_aylik_kira * 12)
         yillik_getiri_yuzde = ((tahmini_aylik_kira * 12) / pred_mid) * 100
 
         st.divider()
-        st.markdown("### 📈 Yatırım & Amortisman Metrikleri (ROI)")
+        st.markdown("### Yatırım ve Amortisman Analizi")
         y1, y2, y3 = st.columns(3)
-        y1.metric("Tahmini Monthly Kira Potansiyeli", f"{tahmini_aylik_kira:,.0f} TL/Ay")
-        y2.metric("Amortisman Süresi (Geri Dönüş)", f"{amortisman_yil:.1f} Yıl")
+        y1.metric("Tahmini Aylık Kira Potansiyeli", f"{tahmini_aylik_kira:,.0f} TL/Ay")
+        y2.metric("Amortisman Süresi", f"{amortisman_yil:.1f} Yıl")
         y3.metric("Yıllık Brüt Getiri Oranı", f"%{yillik_getiri_yuzde:.2f}")
 
         st.markdown(f"""
         <div class="rapor-kart">
-            <h3>📋 Yapay Zeka Değerleme & Yatırım Rapor Kartı</h3>
-            <p><strong>Değerleme Tarihi:</strong> {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
+            <h4>Gayrimenkul Değerleme ve Yatırım Özet Raporu</h4>
+            <p><strong>Rapor Tarihi:</strong> {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
             <hr style="border-color: #374151;">
-            <p><strong>Konum:</strong> {s_il} / {s_ilce} | <strong>Net Alan:</strong> {s_brut} m² | <strong>Oda:</strong> {s_oda}+{s_salon}</p>
+            <p><strong>Konum:</strong> {s_il} / {s_ilce} | <strong>Kullanım Alanı:</strong> {s_brut} m² | <strong>Oda Düzeni:</strong> {s_oda}+{s_salon}</p>
             <br>
-            <h5>💰 Fiyatlandırma ve Getiri Özeti</h5>
+            <h5>Değerleme Sonuçları</h5>
             <ul>
                 <li><strong>Tahmini Piyasa Satış Değeri:</strong> {pred_mid:,.0f} TL</li>
-                <li><strong>Tahmini Aylık Kira Potansiyeli:</strong> {tahmini_aylik_kira:,.0f} TL / Ay</li>
-                <li><strong>Yatırımın Kendini Ödeme Süresi:</strong> ~{amortisman_yil:.1f} Yıl</li>
+                <li><strong>Tahmini Aylık Kira Değeri:</strong> {tahmini_aylik_kira:,.0f} TL / Ay</li>
+                <li><strong>Geri Dönüş (Amortisman) Süresi:</strong> Yaklaşık {amortisman_yil:.1f} Yıl</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
 
 # =========================================================
-# SAYFA 3: 📍 HARİTA İLE KEŞFET
+# MODÜL 3: COĞRAFİ HARİTA ANALİZİ
 # =========================================================
-elif menu_secim == "📍 Harita İle Keşfet":
-    st.title("📍 Coğrafi İlan Haritası")
-    st.caption("Harita üzerinde ilanların konumlarını görün, büyüklük ve fiyatlarına göre inceleyin.")
+elif menu_secim == "Coğrafi Harita Analizi":
+    st.title("Coğrafi İlan Dağılım Haritası")
+    st.caption("Veri tabanındaki taşınmazların konumsal dağılımı, büyüklük ve fiyat yoğunlukları.")
 
     coords = {
         'Ataşehir': (40.9833, 29.1167), 'Kadıköy': (40.9903, 29.0275), 'Üsküdar': (41.0244, 29.0050),
@@ -525,26 +522,26 @@ elif menu_secim == "📍 Harita İle Keşfet":
     st.plotly_chart(fig_map, use_container_width=True)
 
 # =========================================================
-# SAYFA 4: 🏦 KONUT KREDİSİ HESAPLAMA
+# MODÜL 4: KONUT KREDİSİ SİMÜLASYONU
 # =========================================================
-elif menu_secim == "🏦 Konut Kredisi Hesaplama":
-    st.title("🏦 Konut Kredisi Simülasyonu")
-    st.caption("Almak istediğiniz evin değerine göre peşinat ve aylık taksit ödeme planını oluşturun.")
+elif menu_secim == "Konut Kredisi Simülasyonu":
+    st.title("Konut Kredisi Hesaplama Modülü")
+    st.caption("Gayrimenkul alımında kullanılacak banka konut kredisi ödeme planı simülasyonu.")
 
     st.markdown("""
     <div class="content-card">
-        <h4>💳 Kredi Parametrelerini Belirleyin</h4>
-        İstediğiniz konut tutarını ve kredi vadesini girerek güncel faiz oranlarıyla aylık taksitinizi hesaplayın.
+        <h4>Kredi Hesaplama Parametreleri</h4>
+        Finansman tutarı ve geri ödeme vadesini belirleyiniz.
     </div>
     """, unsafe_allow_html=True)
 
     col1, col2 = st.columns(2)
     with col1:
-        tutar = st.number_input("Konut Değeri (TL)", value=5_000_000.0, step=100000.0, key="kredi_page_tutar")
-        pesinat = st.slider("Peşinat Oranı (%)", 10, 90, 20, 5, key="kredi_page_pesinat")
-        vade = st.selectbox("Vade Süresi (Ay)", [60, 84, 120, 180, 240], index=2, key="kredi_page_vade")
+        tutar = st.number_input("Konut Rayiç Bedeli (TL)", value=5_000_000.0, step=100000.0, key="kredi_page_tutar")
+        pesinat = st.slider("Özkaynak / Peşinat Oranı (%)", 10, 90, 20, 5, key="kredi_page_pesinat")
+        vade = st.selectbox("Geri Ödeme Vadesi (Ay)", [60, 84, 120, 180, 240], index=2, key="kredi_page_vade")
     with col2:
-        faiz = st.number_input("Aylık Faiz Oranı (%)", 0.1, 10.0, 2.79, 0.01, key="kredi_page_faiz")
+        faiz = st.number_input("Aylık Akdi Faiz Oranı (%)", 0.1, 10.0, 2.79, 0.01, key="kredi_page_faiz")
 
     pesinat_tutar = tutar * (pesinat / 100)
     kredi = tutar - pesinat_tutar
@@ -555,28 +552,28 @@ elif menu_secim == "🏦 Konut Kredisi Hesaplama":
         
         st.divider()
         m1, m2, m3 = st.columns(3)
-        m1.metric("Gerekli Peşinat Tutarı", f"{pesinat_tutar:,.0f} TL")
-        m2.metric("Çekilecek Kredi Tutarı", f"{kredi:,.0f} TL")
-        m3.metric("Aylık Ödenecek Taksit", f"{taksit:,.2f} TL")
+        m1.metric("Peşinat Tutarı", f"{pesinat_tutar:,.0f} TL")
+        m2.metric("Kredi Tutarı", f"{kredi:,.0f} TL")
+        m3.metric("Aylık Taksit Bedeli", f"{taksit:,.2f} TL")
         
         st.markdown(f"""
         <div class="rapor-kart">
-            <h4>📊 Ödeme Planı Özeti</h4>
+            <h4>Geri Ödeme Planı Detayı</h4>
             <ul>
-                <li><strong>Toplam Geri Ödeme:</strong> {toplam:,.2f} TL</li>
-                <li><strong>Toplam Ödenecek Faiz Tutarı:</strong> {toplam - kredi:,.2f} TL</li>
+                <li><strong>Toplam Geri Ödeme Bedeli:</strong> {toplam:,.2f} TL</li>
+                <li><strong>Toplam Tahakkuk Eden Faiz:</strong> {toplam - kredi:,.2f} TL</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
 
 # =========================================================
-# SAYFA 5: 📊 PİYASA & MODEL ANALİTİĞİ
+# MODÜL 5: MODEL VE PİYASA ANALİTİĞİ
 # =========================================================
-elif menu_secim == "📊 Piyasa & Model Analitiği":
-    st.title("📊 Piyasa Analitiği & Yapay Zeka Başarımı")
-    st.caption("Veri setindeki değişkenlerin fiyat üzerindeki ağırlıkları ve model performans metrikleri.")
+elif menu_secim == "Model ve Piyasa Analitiği":
+    st.title("Model Performansı ve Piyasa İstatistikleri")
+    st.caption("Veri analitiği süreçleri ve makine öğrenmesi modellerinin başarım kriterleri.")
 
-    st.markdown("### 🧬 Öznitelik Önem Düzeyleri")
+    st.markdown("### Öznitelik Önem Düzeyleri")
     try:
         importance = model_mid.get_feature_importance()
         names = ['m² (Brüt)', 'Oda Sayısı', 'Salon Sayısı', 'Oda Başı m²', 'Semt / İlçe']
@@ -585,14 +582,14 @@ elif menu_secim == "📊 Piyasa & Model Analitiği":
         fig.update_layout(template="plotly_dark", height=350)
         st.plotly_chart(fig, use_container_width=True)
     except:
-        st.info("Hesaplanamadı.")
+        st.info("Hesaplama gerçekleştirilemedi.")
 
     st.divider()
-    st.markdown("### 🏆 Algoritma Karşılaştırması")
+    st.markdown("### Model Başarım Karşılaştırması")
     benchmark = pd.DataFrame([
-        {"Model": "CatBoost Regressor (Bu Model)", "R² Skor": f"%{model_r2*100:.2f}", "MAE (Hata)": f"{model_mae:,.0f} TL"},
-        {"Model": "LightGBM", "R² Skor": "%93.00", "MAE (Hata)": "806,166 TL"},
-        {"Model": "Gradient Boosting", "R² Skor": "%92.97", "MAE (Hata)": "834,818 TL"},
-        {"Model": "Random Forest", "R² Skor": "%92.28", "MAE (Hata)": "876,419 TL"},
+        {"Model": "CatBoost Regressor", "R² Metriği": f"%{model_r2*100:.2f}", "MAE (Ortalama Mutlak Hata)": f"{model_mae:,.0f} TL"},
+        {"Model": "LightGBM", "R² Metriği": "%93.00", "MAE (Ortalama Mutlak Hata)": "806,166 TL"},
+        {"Model": "Gradient Boosting", "R² Metriği": "%92.97", "MAE (Ortalama Mutlak Hata)": "834,818 TL"},
+        {"Model": "Random Forest", "R² Metriği": "%92.28", "MAE (Ortalama Mutlak Hata)": "876,419 TL"},
     ])
     st.dataframe(benchmark, use_container_width=True, hide_index=True)
