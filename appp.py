@@ -23,6 +23,7 @@ st.markdown("""
     .stApp { background-color: #0B0F19; color: #E2E8F0; }
     h1, h2, h3, h4 { color: #F8FAFC !important; font-weight: 600 !important; }
     
+    /* Metrik Kartları */
     div[data-testid="stMetric"] {
         background: #111827;
         border: 1px solid #1F2937;
@@ -34,11 +35,13 @@ st.markdown("""
         color: #3B82F6 !important; font-weight: 700 !important; font-size: 1.35rem !important;
     }
     
+    /* Sol Menü */
     section[data-testid="stSidebar"] {
         background-color: #0F172A;
         border-right: 1px solid #1E293B;
     }
     
+    /* Buton Tasarımı */
     .stButton > button {
         background-color: #2563EB;
         color: white;
@@ -52,6 +55,7 @@ st.markdown("""
         background-color: #1D4ED8;
     }
 
+    /* Özel Kart Alanları */
     .content-card {
         background-color: #111827;
         border: 1px solid #1F2937;
@@ -257,30 +261,45 @@ if menu_secim == "İlan Arama ve Filtreleme":
 
     st.markdown("<br>", unsafe_allow_html=True)
 
+    # FİLTRE SIFIRLAMA BUTONU
+    if st.button("Filtre Seçimlerini Sıfırla"):
+        st.session_state["f_il"] = "Önce İl Seçiniz"
+        st.session_state["f_ilce"] = "Önce İl Seçiniz"
+        st.session_state["f_mahalle"] = "Önce İlçe Seçiniz"
+        st.session_state["f_oda"] = "Tümü"
+        st.session_state["f_m2"] = (int(df['m² (Brüt)'].min()), int(df['m² (Brüt)'].max()))
+        st.session_state["f_butce"] = min(40_000_000, int(df['Fiyat'].max()))
+        st.session_state["f_ulasim"] = "Tümü"
+        st.session_state["f_market"] = "Tümü"
+        st.session_state["f_hastane"] = "Tümü"
+        st.session_state["c_site"] = False
+        st.session_state["c_havuz"] = False
+        st.session_state["c_otopark"] = False
+        st.session_state["c_ebeveyn"] = False
+        st.session_state["c_dubleks"] = False
+        st.session_state["c_bahce"] = False
+        st.session_state["c_guvenlik"] = False
+        st.session_state["c_sifir"] = False
+        st.rerun()
+
     with st.expander("Sorgulama Kriterleri ve Lokasyon Filtreleri", expanded=True):
         f_col1, f_col2, f_col3 = st.columns(3)
         with f_col1:
             st.markdown("##### Lokasyon Parametreleri")
             
-            # 1. İL SEÇİMİ (VARSAYILAN: ÖNCE İL SEÇİNİZ)
             il_options = ["Önce İl Seçiniz", "Tüm İller"] + sorted(list(set(TURKIYE_ILLERI + df['İl'].unique().tolist())))
-            selected_il = st.selectbox("İl", il_options, index=0, key="f_il")
+            selected_il = st.selectbox("İl", il_options, key="f_il")
             
-            # 2. İLÇE SEÇİMİ (İL SEÇİLMEDEN LİSTELENMEZ)
             if selected_il == "Önce İl Seçiniz":
                 ilce_list = ["Önce İl Seçiniz"]
             elif selected_il == "Tüm İller":
                 ilce_list = ["Tüm İlçeler"] + sorted(df['İlçe'].unique().tolist())
             else:
                 ilce_options = sorted(df[df['İl'] == selected_il]['İlçe'].unique().tolist())
-                if len(ilce_options) == 0:
-                    ilce_list = ["Seçilen İlde Kayıtlı İlçe Yok"]
-                else:
-                    ilce_list = ["Tüm İlçeler"] + ilce_options
+                ilce_list = ["Tüm İlçeler"] + ilce_options if len(ilce_options) > 0 else ["Seçilen İlde Kayıtlı İlçe Yok"]
                 
             selected_ilce = st.selectbox("İlçe", ilce_list, key="f_ilce")
             
-            # 3. MAHALLE SEÇİMİ (İLÇE SEÇİLMEDEN LİSTELENMEZ)
             if selected_ilce in ["Önce İl Seçiniz", "Seçilen İlde Kayıtlı İlçe Yok"]:
                 mahalle_list = ["Önce İlçe Seçiniz"]
             elif selected_ilce == "Tüm İlçeler":
@@ -290,10 +309,7 @@ if menu_secim == "İlan Arama ve Filtreleme":
                     mahalle_list = ["Tüm Mahalleler"] + sorted(df[df['İl'] == selected_il]['Mahalle'].unique().tolist())
             else:
                 mahalle_options = sorted(df[(df['İlçe'] == selected_ilce) & (df['İl'] == selected_il if selected_il != "Tüm İller" else True)]['Mahalle'].unique().tolist())
-                if len(mahalle_options) == 0:
-                    mahalle_list = ["Kayıtlı Mahalle Yok"]
-                else:
-                    mahalle_list = ["Tüm Mahalleler"] + mahalle_options
+                mahalle_list = ["Tüm Mahalleler"] + mahalle_options if len(mahalle_options) > 0 else ["Kayıtlı Mahalle Yok"]
 
             selected_mahalle = st.selectbox("Mahalle", mahalle_list, key="f_mahalle")
 
