@@ -109,7 +109,7 @@ except Exception as e:
     st.stop()
 
 # =========================================================
-# 3. SIDEBAR FİLTRELER (Geniş varsayılanlar)
+# 3. SIDEBAR FİLTRELER
 # =========================================================
 st.sidebar.header("Filtreler")
 
@@ -126,11 +126,9 @@ selected_mahalle = st.sidebar.selectbox("Mahalle", mahalle_list, key="mahalle_se
 oda_list = ["Tümü"] + sorted(df['Oda Düzeni'].unique().tolist())
 selected_oda = st.sidebar.selectbox("Oda Düzeni", oda_list, key="oda_sec")
 
-# Geniş m² varsayılanı
 min_m2, max_m2 = int(df['m² (Brüt)'].min()), int(df['m² (Brüt)'].max())
 m2_range = st.sidebar.slider("Brüt m²", min_m2, max_m2, (40, 350), key="m2_sec")
 
-# Geniş bütçe varsayılanı
 max_price = int(df['Fiyat'].max())
 budget = st.sidebar.number_input(
     "Maksimum Bütçe (TL)",
@@ -162,7 +160,7 @@ filtered = filtered[
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Piyasa İlanları",
     "Evimi Ne Kadara Satarım?",
-    "Lokasyon Dağılımı",
+    "Oda & Isı Haritası",
     "Model Açıklanabilirliği",
     "Performans & Kredi"
 ])
@@ -251,38 +249,67 @@ with tab2:
         - Bu tahmin {len(df):,} gerçek ilan verisine dayanan CatBoost modeli ile yapılmıştır.
         """)
 
-# -------------------- TAB 3: HARİTA --------------------
+# -------------------- TAB 3: ODA DAĞILIMI + ISI HARİTASI --------------------
 with tab3:
-    st.subheader("İstanbul Lokasyon Dağılımı")
-    coords = {
-        'Ataşehir': (40.9833, 29.1167), 'Kadıköy': (40.9903, 29.0275), 'Üsküdar': (41.0244, 29.0050),
-        'Beşiktaş': (41.0422, 29.0067), 'Şişli': (41.0600, 28.9870), 'Bakırköy': (40.9800, 28.8700),
-        'Bağcılar': (41.0339, 28.8579), 'Bahçelievler': (41.0003, 28.8638), 'Küçükçekmece': (40.9917, 28.7719),
-        'Avcılar': (40.9801, 28.7175), 'Esenyurt': (41.0342, 28.6801), 'Başakşehir': (41.0975, 28.8064),
-        'Maltepe': (40.9333, 29.1333), 'Kartal': (40.8886, 29.1856), 'Pendik': (40.8750, 29.2333),
-        'Ümraniye': (41.0256, 29.1244), 'Sancaktepe': (40.9900, 29.2300), 'Beylikdüzü': (40.9900, 28.6400),
-        'Arnavutköy': (41.1852, 28.7410), 'Sarıyer': (41.1667, 29.0500), 'Eyüpsultan': (41.0550, 28.9340),
-        'Gaziosmanpaşa': (41.0780, 28.9010), 'Büyükçekmece': (41.0200, 28.5850), 'Bahçeşehir': (41.0920, 28.6840)
-    }
-    map_df = df.copy()
-    def get_coords(row):
-        for name, (lat, lon) in coords.items():
-            if name.lower() in str(row['İlçe']).lower():
-                return pd.Series([lat, lon])
-        return pd.Series([41.0082, 28.9784])
-    map_df[['lat', 'lon']] = map_df.apply(get_coords, axis=1)
-    np.random.seed(42)
-    map_df['lat'] += np.random.normal(0, 0.008, len(map_df))
-    map_df['lon'] += np.random.normal(0, 0.008, len(map_df))
-    fig = px.scatter_mapbox(
-        map_df.sample(min(800, len(map_df))),
-        lat="lat", lon="lon", color="Fiyat", size="m² (Brüt)",
-        hover_name="İlçe", color_continuous_scale="Reds",
-        size_max=12, zoom=9.2, center={"lat": 41.02, "lon": 28.90},
-        mapbox_style="carto-darkmatter", height=520
+    st.subheader("Oda Düzeni Dağılımı & Fiyat Isı Haritası")
+
+    col_a, col_b = st.columns(2)
+
+    with col_a:
+        st.markdown("#### Oda Düzeni Dağılımı")
+        oda_counts = df['Oda Düzeni'].value_counts().head(12).reset_index()
+        oda_counts.columns = ['Oda Düzeni', 'İlan Sayısı']
+
+        fig_oda = px.bar(
+            oda_counts,
+            x='Oda Düzeni',
+            y='İlan Sayısı',
+            color='İlan Sayısı',
+            color_continuous_scale='Blues',
+            text='İlan Sayısı'
+        )
+        fig_oda.update_traces(textposition='outside')
+        fig_oda.update_layout(template="plotly_dark", height=380, showlegend=False, margin=dict(t=20, b=40))
+        st.plotly_chart(fig_oda, use_container_width=True)
+
+    with col_b:
+        st.markdown("#### Oda Düzenine Göre Ortalama Fiyat")
+        oda_price = df.groupby('Oda Düzeni')['Fiyat'].mean().sort_values(ascending=False).head(12).reset_index()
+        oda_price.columns = ['Oda Düzeni', 'Ortalama Fiyat']
+
+        fig_price = px.bar(
+            oda_price,
+            x='Oda Düzeni',
+            y='Ortalama Fiyat',
+            color='Ortalama Fiyat',
+            color_continuous_scale='Reds',
+            text='Ortalama Fiyat'
+        )
+        fig_price.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+        fig_price.update_layout(template="plotly_dark", height=380, showlegend=False, margin=dict(t=20, b=40))
+        st.plotly_chart(fig_price, use_container_width=True)
+
+    st.divider()
+    st.markdown("#### İlçe × Oda Düzeni Ortalama Fiyat Isı Haritası")
+    st.caption("Renk ne kadar koyu/kırmızıysa ortalama fiyat o kadar yüksek")
+
+    top_ilceler = df['İlçe'].value_counts().head(15).index.tolist()
+    top_odalar = df['Oda Düzeni'].value_counts().head(8).index.tolist()
+
+    heat_df = df[df['İlçe'].isin(top_ilceler) & df['Oda Düzeni'].isin(top_odalar)]
+    pivot = heat_df.pivot_table(values='Fiyat', index='İlçe', columns='Oda Düzeni', aggfunc='mean')
+    pivot = pivot.reindex(top_ilceler)
+    pivot = pivot[[c for c in top_odalar if c in pivot.columns]]
+
+    fig_heat = px.imshow(
+        pivot,
+        color_continuous_scale='YlOrRd',
+        aspect='auto',
+        labels=dict(color="Ort. Fiyat (TL)")
     )
-    fig.update_layout(margin=dict(l=0, r=0, t=0, b=0))
-    st.plotly_chart(fig, use_container_width=True)
+    fig_heat.update_layout(template="plotly_dark", height=520, margin=dict(l=10, r=10, t=30, b=10))
+    fig_heat.update_traces(hovertemplate="İlçe: %{y}<br>Oda: %{x}<br>Ort. Fiyat: %{z:,.0f} TL<extra></extra>")
+    st.plotly_chart(fig_heat, use_container_width=True)
 
 # -------------------- TAB 4: XAI --------------------
 with tab4:
