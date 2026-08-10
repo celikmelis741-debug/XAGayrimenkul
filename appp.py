@@ -23,6 +23,7 @@ st.markdown("""
     .stApp { background-color: #0B0F19; color: #E2E8F0; }
     h1, h2, h3, h4 { color: #F8FAFC !important; font-weight: 600 !important; }
     
+    /* Metrik Kartları */
     div[data-testid="stMetric"] {
         background: #111827;
         border: 1px solid #1F2937;
@@ -34,11 +35,13 @@ st.markdown("""
         color: #3B82F6 !important; font-weight: 700 !important; font-size: 1.35rem !important;
     }
     
+    /* Sol Menü */
     section[data-testid="stSidebar"] {
         background-color: #0F172A;
         border-right: 1px solid #1E293B;
     }
     
+    /* Buton Tasarımı */
     .stButton > button {
         background-color: #2563EB;
         color: white;
@@ -52,6 +55,7 @@ st.markdown("""
         background-color: #1D4ED8;
     }
 
+    /* Özel Kart Alanları */
     .content-card {
         background-color: #111827;
         border: 1px solid #1F2937;
@@ -95,22 +99,38 @@ TURKIYE_ILLERI = [
 # =========================================================
 EXCEL_FILE = "ilanlar_mesafeli.xlsx"
 
-def basliktan_ozellik_cikar(baslik):
+def basliktan_ozellik_ve_yas_cikar(baslik):
     if pd.isna(baslik):
-        return []
+        return [], 10
     t = str(baslik).upper()
     oz = []
     
+    # BİNA YAŞI TESPİTİ
+    bina_yasi = 10  # Varsayılan yaş değeri
+    if any(k in t for k in ['SIFIR', 'YENİ BİNA', 'PROJEDEN', 'SIFIR DAİRE']):
+        bina_yasi = 0
+        oz.append("Sıfır / Yeni")
+    else:
+        m = re.search(r'(\d+)\s*(YILLIK|YAŞINDA|YAŞ|YASINDA|YAS)', t)
+        if m:
+            bina_yasi = int(m.group(1))
+            oz.append(f"{bina_yasi} Yıllık Bina")
+
+    # DEPREM VE BİNA GÜVENLİĞİ NİTELİKLERİ
     if any(k in t for k in ['DEPREM YÖNETMELİĞİ', 'RADYE TEMEL', 'PERDE BETON', 'DEPREM ETÜDLÜ', 'C30', 'C35', 'ZEMİN ETÜDLÜ']):
         oz.append("Deprem Yönetmeliğine Uygun")
     if any(k in t for k in ['KENTSEL DÖNÜŞÜM', 'GÜÇLENDİRİLMİŞ', 'HASARSIZ']):
         oz.append("Kentsel Dönüşüm / Güçlendirilmiş")
+        
+    # ULAŞIM VE LOKASYON
     if any(k in t for k in ['METRO', 'METROBUS', 'METROBÜS', 'MARMARAY', 'TRAMVAY']):
         oz.append("Ulaşım")
     if any(k in t for k in ['MARKET', 'ÇARŞI', 'AVM']):
         oz.append("Market / AVM")
     if any(k in t for k in ['MANZARA', 'DENİZ', 'BOĞAZ', 'ORMAN', 'GÖL']):
         oz.append("Manzara")
+        
+    # BİNA VE DAİRE NİTELİKLERİ
     if any(k in t for k in ['SİTE', 'SITE']):
         oz.append("Site içinde")
     if any(k in t for k in ['HAVUZ', 'YÜZME HAVUZU']):
@@ -125,8 +145,6 @@ def basliktan_ozellik_cikar(baslik):
         oz.append("Spor Salonu / Tesis")
     if any(k in t for k in ['ASANSÖR', 'ASANSOR']):
         oz.append("Asansör")
-    if any(k in t for k in ['SIFIR', 'YENİ BİNA', 'PROJEDEN']):
-        oz.append("Sıfır / Yeni")
     if any(k in t for k in ['EBEVEYN', 'EBEVEYN BANYO']):
         oz.append("Ebeveyn Banyolu")
     if any(k in t for k in ['BALKON', 'TERAS', 'VERANDA']):
@@ -140,7 +158,7 @@ def basliktan_ozellik_cikar(baslik):
     if any(k in t for k in ['YERDEN ISITMA', 'KOMBİ', 'MERKEZİ ISITMA', 'MANTOLAMA', 'ISI YALITIM']):
         oz.append("Isıtma / Yalıtım")
         
-    return oz
+    return oz, bina_yasi
 
 @st.cache_resource(show_spinner="Veri seti ve algoritmalar yükleniyor...")
 def load_model_and_data():
@@ -149,6 +167,11 @@ def load_model_and_data():
     df['oda_sayisi'] = pd.to_numeric(df['oda_sayisi'], errors='coerce').fillna(2).astype(int)
     df['salon_sayisi'] = pd.to_numeric(df['salon_sayisi'], errors='coerce').fillna(1).astype(int)
     df['Oda Düzeni'] = df['oda_sayisi'].astype(str) + '+' + df['salon_sayisi'].astype(str)
+
+    # BİNA YAŞI VE ÖZELLİK ÇIKARIMI
+    oz_yas = [basliktan_ozellik_ve_yas_cikar(b) for b in df['İlan Başlığı']]
+    df['Ozellikler'] = [x[0] for x in oz_yas]
+    df['bina_yasi'] = [x[1] for x in oz_yas]
 
     # LİNK SÜTUNU TESPİTİ
     link_col = None
@@ -190,9 +213,7 @@ def load_model_and_data():
         else:
             df[col] = 9999
 
-    df['Ozellikler'] = df['İlan Başlığı'].apply(basliktan_ozellik_cikar)
-
-    feature_cols = ['m² (Brüt)', 'oda_sayisi', 'salon_sayisi', 'm2_per_oda', 'Semt']
+    feature_cols = ['m² (Brüt)', 'oda_sayisi', 'salon_sayisi', 'm2_per_oda', 'bina_yasi', 'Semt']
     X = df[feature_cols].copy()
     y_log = np.log1p(df['Fiyat'])
     X['Semt'] = X['Semt'].astype(str)
@@ -286,6 +307,7 @@ if menu_secim == "İlan Arama ve Filtreleme":
             st.session_state["f_oda"] = "Tümü"
             st.session_state["f_m2"] = (int(df['m² (Brüt)'].min()), int(df['m² (Brüt)'].max()))
             st.session_state["f_butce"] = min(40_000_000, int(df['Fiyat'].max()))
+            st.session_state["f_yas"] = (0, 30)
             st.session_state["f_ulasim"] = "Tümü"
             st.session_state["f_market"] = "Tümü"
             st.session_state["f_hastane"] = "Tümü"
@@ -332,12 +354,13 @@ if menu_secim == "İlan Arama ve Filtreleme":
             selected_mahalle = st.selectbox("Mahalle", mahalle_list, key="f_mahalle")
 
         with f_col2:
-            st.markdown("##### Yapı Özellikleri")
+            st.markdown("##### Yapı ve Yaş Özellikleri")
             selected_oda = st.selectbox("Oda Yapısı", ["Tümü"] + sorted(df['Oda Düzeni'].unique().tolist()), key="f_oda")
             min_m2, max_m2 = int(df['m² (Brüt)'].min()), int(df['m² (Brüt)'].max())
             m2_range = st.slider("Brüt Alan (m²)", min_m2, max_m2, (40, 350), key="f_m2")
             max_price = int(df['Fiyat'].max())
             budget = st.number_input("Üst Bütçe Limiti (TL)", 500_000, max_price, min(40_000_000, max_price), 500_000, key="f_butce")
+            bina_yas_range = st.slider("Bina Yaşı Aralığı", 0, 50, (0, 30), key="f_yas")
 
         with f_col3:
             st.markdown("##### Konum ve Yakınlık")
@@ -373,6 +396,7 @@ if menu_secim == "İlan Arama ve Filtreleme":
     selected_oda = st.session_state.get("f_oda", "Tümü")
     m2_range = st.session_state.get("f_m2", (int(df['m² (Brüt)'].min()), int(df['m² (Brüt)'].max())))
     budget = st.session_state.get("f_butce", min(40_000_000, int(df['Fiyat'].max())))
+    bina_yas_range = st.session_state.get("f_yas", (0, 30))
     f_ulasim = st.session_state.get("f_ulasim", "Tümü")
     f_market = st.session_state.get("f_market", "Tümü")
     f_hastane = st.session_state.get("f_hastane", "Tümü")
@@ -397,7 +421,13 @@ if menu_secim == "İlan Arama ve Filtreleme":
     if selected_oda != "Tümü":
         filtered = filtered[filtered['Oda Düzeni'] == selected_oda]
 
-    filtered = filtered[(filtered['m² (Brüt)'] >= m2_range[0]) & (filtered['m² (Brüt)'] <= m2_range[1]) & (filtered['Fiyat'] <= budget)]
+    filtered = filtered[
+        (filtered['m² (Brüt)'] >= m2_range[0]) & 
+        (filtered['m² (Brüt)'] <= m2_range[1]) & 
+        (filtered['Fiyat'] <= budget) &
+        (filtered['bina_yasi'] >= bina_yas_range[0]) &
+        (filtered['bina_yasi'] <= bina_yas_range[1])
+    ]
 
     if f_ulasim == "1.5 km'den yakın": filtered = filtered[filtered['ulasim_mesafe_m'] <= 1500]
     elif f_ulasim == "3 km'den yakın": filtered = filtered[filtered['ulasim_mesafe_m'] <= 3000]
@@ -415,7 +445,7 @@ if menu_secim == "İlan Arama ve Filtreleme":
     if f_bahce: filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Bahçeli"))]
     if f_sifir: filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Sıfır"))]
 
-    arama = st.text_input("Metin Arama (İlan Başlığı / İlçe / Mahalle)", placeholder="Örn: 3+1, Kadıköy, radye temel, ara kat...", key="arama_input")
+    arama = st.text_input("Metin Arama (İlan Başlığı / İlçe / Mahalle)", placeholder="Örn: 3+1, Kadıköy, radye temel, 5 yıllık, ara kat...", key="arama_input")
     if arama:
         metin = arama.lower().strip()
         filtered = filtered[
@@ -430,11 +460,12 @@ if menu_secim == "İlan Arama ve Filtreleme":
     else:
         show_df = filtered.head(40).copy()
         show_df['m² Birim Fiyatı'] = show_df['fiyat_m2'].apply(lambda x: f"{x:,.0f} TL")
-        show_cols = ['İlan Başlığı', 'İlçe', 'Mahalle', 'Oda Düzeni', 'm² (Brüt)', 'm² Birim Fiyatı', 'Fiyat', 'İlan Bağlantısı']
+        show_cols = ['İlan Başlığı', 'İlçe', 'Mahalle', 'Oda Düzeni', 'bina_yasi', 'm² (Brüt)', 'm² Birim Fiyatı', 'Fiyat', 'İlan Bağlantısı']
         
         event = st.dataframe(
             show_df[show_cols].style.format({'Fiyat': '{:,.0f} TL', 'm² (Brüt)': '{:.0f}'}),
             column_config={
+                "bina_yasi": st.column_config.NumberColumn("Bina Yaşı", format="%d Yıl"),
                 "İlan Bağlantısı": st.column_config.LinkColumn(
                     "İlan Bağlantısı",
                     help="İlanın orijinal kaynağını görüntüle",
@@ -447,7 +478,7 @@ if menu_secim == "İlan Arama ve Filtreleme":
 
         export_df = filtered.copy()
         export_df['m² Birim Fiyatı'] = export_df['fiyat_m2'].apply(lambda x: f"{x:,.0f} TL")
-        export_cols = ['İlan Başlığı', 'İl', 'İlçe', 'Mahalle', 'Oda Düzeni', 'm² (Brüt)', 'm² Birim Fiyatı', 'Fiyat', 'İlan Bağlantısı']
+        export_cols = ['İlan Başlığı', 'İl', 'İlçe', 'Mahalle', 'Oda Düzeni', 'bina_yasi', 'm² (Brüt)', 'm² Birim Fiyatı', 'Fiyat', 'İlan Bağlantısı']
         valid_export_cols = [c for c in export_cols if c in export_df.columns]
         
         csv_data = export_df[valid_export_cols].to_csv(index=False, encoding='utf-8-sig')
@@ -464,7 +495,7 @@ if menu_secim == "İlan Arama ve Filtreleme":
         row = show_df.iloc[selected_rows[0]] if selected_rows else show_df.iloc[0]
 
         st.markdown(f"### Seçili Kayıt Detayı: {row['İlan Başlığı']}")
-        st.caption(f"Lokasyon: **{row['İl']} / {row['İlçe']} / {row['Mahalle']}** | Tip: **{row['Oda Düzeni']}** | Alan: **{row['m² (Brüt)']} m²** | Satış Bedeli: **{row['Fiyat']:,.0f} TL**")
+        st.caption(f"Lokasyon: **{row['İl']} / {row['İlçe']} / {row['Mahalle']}** | Tip: **{row['Oda Düzeni']}** | Bina Yaşı: **{row['bina_yasi']} Yıl** | Alan: **{row['m² (Brüt)']} m²** | Satış Bedeli: **{row['Fiyat']:,.0f} TL**")
         
         c1, c2, c3 = st.columns(3)
         c1.metric("Toplu Ulaşım Noktası", mesafe_etiket(row['ulasim_mesafe_m']))
@@ -489,6 +520,7 @@ if menu_secim == "İlan Arama ve Filtreleme":
                     st.markdown(f"#### İlan {idx+1}")
                     st.write(f"**{k_row['İlan Başlığı'][:35]}...**")
                     st.metric("Satış Bedeli", f"{k_row['Fiyat']:,.0f} TL")
+                    st.metric("Bina Yaşı", f"{k_row['bina_yasi']} Yıl")
                     st.metric("Birim Fiyat", f"{k_row['fiyat_m2']:,.0f} TL/m²")
                     st.write(f"**Konum:** {k_row['İlçe']} / {k_row['Mahalle']}")
 
@@ -520,8 +552,9 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
     with c_deg2:
         s_brut = st.number_input("Brüt Kullanım Alanı (m²)", 30, 800, 120, key="val_brut")
         s_oda = st.selectbox("Oda Sayısı", [1, 2, 3, 4, 5, 6, 7, 8], index=2, key="val_oda")
-    with c_deg3:
         s_salon = st.selectbox("Salon Sayısı", [0, 1, 2], index=1, key="val_salon")
+    with c_deg3:
+        s_bina_yasi = st.number_input("Bina Yaşı (Yıl)", 0, 60, 5, key="val_yas")
 
     st.markdown("##### Ek Yapı Nitelikleri")
     sc1, sc2, sc3 = st.columns(3)
@@ -551,6 +584,7 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
                 'oda_sayisi': float(s_oda),
                 'salon_sayisi': float(s_salon),
                 'm2_per_oda': m2_per_o,
+                'bina_yasi': float(s_bina_yasi),
                 'Semt': semt_degeri
             }])
 
@@ -593,7 +627,7 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
                 <h4>Gayrimenkul Değerleme ve Yatırım Özet Raporu</h4>
                 <p><strong>Rapor Tarihi:</strong> {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
                 <hr style="border-color: #374151;">
-                <p><strong>Konum:</strong> {s_il} / {s_ilce} | <strong>Kullanım Alanı:</strong> {s_brut} m² | <strong>Oda Düzeni:</strong> {s_oda}+{s_salon}</p>
+                <p><strong>Konum:</strong> {s_il} / {s_ilce} | <strong>Kullanım Alanı:</strong> {s_brut} m² | <strong>Bina Yaşı:</strong> {s_bina_yasi} Yıl | <strong>Oda Düzeni:</strong> {s_oda}+{s_salon}</p>
                 <br>
                 <h5>Değerleme Sonuçları</h5>
                 <ul>
@@ -611,6 +645,7 @@ Tarih: {datetime.now().strftime('%d/%m/%Y %H:%M')}
 -----------------------------------------
 Lokasyon: {s_il} / {s_ilce}
 Brüt Alan: {s_brut} m²
+Bina Yaşı: {s_bina_yasi} Yıl
 Oda Yapısı: {s_oda}+{s_salon}
 
 2. DEĞERLEME SONUÇLARI (CATBOOST REGRESSION)
@@ -793,7 +828,7 @@ elif menu_secim == "Model ve Piyasa Analitiği":
     st.markdown("### Öznitelik Önem Düzeyleri")
     try:
         importance = model_mid.get_feature_importance()
-        names = ['m² (Brüt)', 'Oda Sayısı', 'Salon Sayısı', 'Oda Başı m²', 'Semt / İlçe']
+        names = ['m² (Brüt)', 'Oda Sayısı', 'Salon Sayısı', 'Oda Başı m²', 'Bina Yaşı', 'Semt / İlçe']
         f_df = pd.DataFrame({'Öznitelik': names[:len(importance)], 'Önem Seviyesi (%)': importance}).sort_values('Önem Seviyesi (%)')
         fig = px.bar(f_df, x='Önem Seviyesi (%)', y='Öznitelik', orientation='h', color='Önem Seviyesi (%)', color_continuous_scale='Blues')
         fig.update_layout(template="plotly_dark", height=350)
