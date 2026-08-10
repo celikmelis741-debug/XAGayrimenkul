@@ -261,32 +261,31 @@ if menu_secim == "İlan Arama ve Filtreleme":
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # FİLTRE SIFIRLAMA BUTONU
-    if st.button("Filtre Seçimlerini Sıfırla"):
-        st.session_state["f_il"] = "Önce İl Seçiniz"
-        st.session_state["f_ilce"] = "Önce İl Seçiniz"
-        st.session_state["f_mahalle"] = "Önce İlçe Seçiniz"
-        st.session_state["f_oda"] = "Tümü"
-        st.session_state["f_m2"] = (int(df['m² (Brüt)'].min()), int(df['m² (Brüt)'].max()))
-        st.session_state["f_butce"] = min(40_000_000, int(df['Fiyat'].max()))
-        st.session_state["f_ulasim"] = "Tümü"
-        st.session_state["f_market"] = "Tümü"
-        st.session_state["f_hastane"] = "Tümü"
-        st.session_state["c_site"] = False
-        st.session_state["c_havuz"] = False
-        st.session_state["c_otopark"] = False
-        st.session_state["c_ebeveyn"] = False
-        st.session_state["c_dubleks"] = False
-        st.session_state["c_bahce"] = False
-        st.session_state["c_guvenlik"] = False
-        st.session_state["c_sifir"] = False
-        st.rerun()
+    # MOBİL UYUMLU DARALTILMIŞ FİLTRE PANELİ (VARSAYILAN: KAPALI)
+    with st.expander("Filtreleri Göster / Gizle", expanded=False):
+        if st.button("Filtre Seçimlerini Sıfırla"):
+            st.session_state["f_il"] = "Önce İl Seçiniz"
+            st.session_state["f_ilce"] = "Önce İl Seçiniz"
+            st.session_state["f_mahalle"] = "Önce İlçe Seçiniz"
+            st.session_state["f_oda"] = "Tümü"
+            st.session_state["f_m2"] = (int(df['m² (Brüt)'].min()), int(df['m² (Brüt)'].max()))
+            st.session_state["f_butce"] = min(40_000_000, int(df['Fiyat'].max()))
+            st.session_state["f_ulasim"] = "Tümü"
+            st.session_state["f_market"] = "Tümü"
+            st.session_state["f_hastane"] = "Tümü"
+            st.session_state["c_site"] = False
+            st.session_state["c_havuz"] = False
+            st.session_state["c_otopark"] = False
+            st.session_state["c_ebeveyn"] = False
+            st.session_state["c_dubleks"] = False
+            st.session_state["c_bahce"] = False
+            st.session_state["c_guvenlik"] = False
+            st.session_state["c_sifir"] = False
+            st.rerun()
 
-    with st.expander("Sorgulama Kriterleri ve Lokasyon Filtreleri", expanded=True):
         f_col1, f_col2, f_col3 = st.columns(3)
         with f_col1:
             st.markdown("##### Lokasyon Parametreleri")
-            
             il_options = ["Önce İl Seçiniz", "Tüm İller"] + sorted(list(set(TURKIYE_ILLERI + df['İl'].unique().tolist())))
             selected_il = st.selectbox("İl", il_options, key="f_il")
             
@@ -341,6 +340,25 @@ if menu_secim == "İlan Arama ve Filtreleme":
         with o4:
             f_guvenlik = st.checkbox("Güvenlik Hizmeti", key="c_guvenlik")
             f_sifir = st.checkbox("Sıfır / Yeni Bina", key="c_sifir")
+
+    # FİLTRE DEĞERLERİNİ UYGULAMA (SESSION STATE KONTROLÜ)
+    selected_il = st.session_state.get("f_il", "Önce İl Seçiniz")
+    selected_ilce = st.session_state.get("f_ilce", "Önce İl Seçiniz")
+    selected_mahalle = st.session_state.get("f_mahalle", "Önce İlçe Seçiniz")
+    selected_oda = st.session_state.get("f_oda", "Tümü")
+    m2_range = st.session_state.get("f_m2", (int(df['m² (Brüt)'].min()), int(df['m² (Brüt)'].max())))
+    budget = st.session_state.get("f_butce", min(40_000_000, int(df['Fiyat'].max())))
+    f_ulasim = st.session_state.get("f_ulasim", "Tümü")
+    f_market = st.session_state.get("f_market", "Tümü")
+    f_hastane = st.session_state.get("f_hastane", "Tümü")
+    f_site = st.session_state.get("c_site", False)
+    f_havuz = st.session_state.get("c_havuz", False)
+    f_otopark = st.session_state.get("c_otopark", False)
+    f_ebeveyn = st.session_state.get("c_ebeveyn", False)
+    f_dubleks = st.session_state.get("c_dubleks", False)
+    f_bahce = st.session_state.get("c_bahce", False)
+    f_guvenlik = st.session_state.get("c_guvenlik", False)
+    f_sifir = st.session_state.get("c_sifir", False)
 
     filtered = df.copy()
     if selected_il not in ["Önce İl Seçiniz", "Tüm İller"]:
