@@ -8,6 +8,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import shap
 import re
+from fpdf import FPDF
+from datetime import datetime
 
 # =========================================================
 # 1. SAYFA AYARLARI + TEMA
@@ -67,7 +69,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("XAI Gayrimenkul Değerleme Platformu")
-st.caption("CatBoost + SHAP Model Açıklanabilirliği & İlan Karşılaştırma Modülü")
+st.caption("CatBoost + SHAP Model Açıklanabilirliği & PDF Raporlama Entegrasyonu")
 
 # =========================================================
 # 2. VERİ VE MODEL
@@ -179,13 +181,50 @@ except Exception as e:
     st.stop()
 
 def mesafe_etiket(m):
-    if m <= 800: return f"~{m} m (çok yakın)"
-    if m <= 1500: return f"~{m} m (yakın)"
+    if m <= 800: return f"~{m} m (cok yakin)"
+    if m <= 1500: return f"~{m} m (yakin)"
     if m <= 3000: return f"~{m} m (orta)"
     return f"~{m} m (uzak)"
 
 def has_ozellik(lst, aranan):
     return any(aranan.lower() in o.lower() for o in lst)
+
+# 3. ADIM GELİŞTİRMESİ: PDF OLUŞTURMA FONKSİYONU
+def generate_pdf_report(ilce, brut, oda, salon, pred_mid, pred_low, pred_high, ozellikler_list):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", 'B', 18)
+    
+    # Başlık
+    pdf.cell(0, 10, "GAYRIMENKUL DEGERLEME RAPORU", ln=True, align='C')
+    pdf.set_font("Helvetica", 'I', 10)
+    pdf.cell(0, 10, f"Rapor Tarihi: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True, align='C')
+    pdf.ln(10)
+    
+    # Konut Bilgileri
+    pdf.set_font("Helvetica", 'B', 14)
+    pdf.cell(0, 8, "1. Konut Ozellikleri", ln=True)
+    pdf.set_font("Helvetica", '', 11)
+    pdf.cell(0, 6, f"- Ilce: {ilce}", ln=True)
+    pdf.cell(0, 6, f"- Brut Alan: {brut} m2", ln=True)
+    pdf.cell(0, 6, f"- Oda Duzen: {oda}+{salon}", ln=True)
+    pdf.cell(0, 6, f"- Ek Ozellikler: {', '.join(ozellikler_list) if ozellikler_list else 'Yok'}", ln=True)
+    pdf.ln(8)
+    
+    # Yapay Zeka Tahmin Sonuçları
+    pdf.set_font("Helvetica", 'B', 14)
+    pdf.cell(0, 8, "2. Yapay Zeka Degerleme Sonuclari", ln=True)
+    pdf.set_font("Helvetica", '', 11)
+    pdf.cell(0, 6, f"- Tahmini Piyasa Degeri (%50): {pred_mid:,.0f} TL", ln=True)
+    pdf.cell(0, 6, f"- Alt Bant Tahmini (%10 Quantile): {pred_low:,.0f} TL", ln=True)
+    pdf.cell(0, 6, f"- Ust Bant Tahmini (%90 Quantile): {pred_high:,.0f} TL", ln=True)
+    pdf.ln(12)
+    
+    # Bilgilendirme Notu
+    pdf.set_font("Helvetica", 'I', 9)
+    pdf.multi_cell(0, 5, "Not: Bu rapor CatBoost Quantile Regression ve XAI makine ogrenmesi modelleri tarafindan piyasa verileri analiz edilerek otomatik uretilmistir. Resmi ekspertiz raporu yerine gecmez.")
+    
+    return bytes(pdf.output())
 
 # =========================================================
 # 3. SIDEBAR
@@ -354,9 +393,6 @@ with tab1:
             st.markdown("**Başlıkta geçen özellikler:**", unsafe_allow_html=True)
             st.markdown(etiket_html, unsafe_allow_html=True)
 
-        # ---------------------------------------------------------
-        # 2. ADIM GELİŞTİRMESİ: İLAN KARŞILAŞTIRMA MODÜLÜ
-        # ---------------------------------------------------------
         st.divider()
         st.subheader("⚖️ İlan Karşılaştırma Modülü")
         st.caption("Aşağıdaki listeden karşılaştırmak istediğiniz 2 veya 3 ilanı seçin.")
@@ -427,12 +463,23 @@ with tab2:
         pred_low = float(np.expm1(model_low.predict(input_data)[0]))
         pred_high = float(np.expm1(model_high.predict(input_data)[0]))
         
+        secilen_ozellikler = []
         multiplier = 1.0
-        if s_site: multiplier *= 1.04
-        if s_havuz: multiplier *= 1.03
-        if s_otopark: multiplier *= 1.02
-        if s_ebeveyn: multiplier *= 1.02
-        if s_sifir: multiplier *= 1.05
+        if s_site: 
+            multiplier *= 1.04
+            secilen_ozellikler.append("Site icinde")
+        if s_havuz: 
+            multiplier *= 1.03
+            secilen_ozellikler.append("Havuzlu")
+        if s_otopark: 
+            multiplier *= 1.02
+            secilen_ozellikler.append("Otoparkli")
+        if s_ebeveyn: 
+            multiplier *= 1.02
+            secilen_ozellikler.append("Ebeveyn Banyolu")
+        if s_sifir: 
+            multiplier *= 1.05
+            secilen_ozellikler.append("Sifir/Yeni")
 
         ulasim_med = ilce_df['ulasim_mesafe_m'].median() if len(ilce_df) else 2000
         if ulasim_med <= 1000:
@@ -447,6 +494,26 @@ with tab2:
         m1.metric("Tahmini Piyasa Değeri (%50)", f"{pred_mid:,.0f} TL")
         m2.metric("Alt Bant Tahmini (%10 Quantile)", f"{pred_low:,.0f} TL")
         m3.metric("Üst Bant Tahmini (%90 Quantile)", f"{pred_high:,.0f} TL")
+
+        # PDF İNDİRME BUTONU ENTEGRASYONU
+        pdf_bytes = generate_pdf_report(
+            ilce=s_ilce,
+            brut=s_brut,
+            oda=s_oda,
+            salon=s_salon,
+            pred_mid=pred_mid,
+            pred_low=pred_low,
+            pred_high=pred_high,
+            ozellikler_list=secilen_ozellikler
+        )
+
+        st.download_button(
+            label="📄 Değerleme Raporunu PDF Olarak İndir",
+            data=pdf_bytes,
+            file_name=f"Gayrimenkul_Degerleme_Raporu_{s_ilce}.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
 
         st.divider()
         st.subheader("💡 Yapay Zeka Fiyat Açıklaması (SHAP Analizi)")
