@@ -23,7 +23,6 @@ st.markdown("""
     .stApp { background-color: #0B0F19; color: #E2E8F0; }
     h1, h2, h3, h4 { color: #F8FAFC !important; font-weight: 600 !important; }
     
-    /* Metrik Kartları */
     div[data-testid="stMetric"] {
         background: #111827;
         border: 1px solid #1F2937;
@@ -35,13 +34,11 @@ st.markdown("""
         color: #3B82F6 !important; font-weight: 700 !important; font-size: 1.35rem !important;
     }
     
-    /* Sol Menü */
     section[data-testid="stSidebar"] {
         background-color: #0F172A;
         border-right: 1px solid #1E293B;
     }
     
-    /* Buton Tasarımı */
     .stButton > button {
         background-color: #2563EB;
         color: white;
@@ -55,7 +52,6 @@ st.markdown("""
         background-color: #1D4ED8;
     }
 
-    /* Özel Kart Alanları */
     .content-card {
         background-color: #111827;
         border: 1px solid #1F2937;
@@ -265,35 +261,39 @@ if menu_secim == "İlan Arama ve Filtreleme":
         f_col1, f_col2, f_col3 = st.columns(3)
         with f_col1:
             st.markdown("##### Lokasyon Parametreleri")
-            il_options = ["Tüm İller"] + sorted(list(set(TURKIYE_ILLERI + df['İl'].unique().tolist())))
+            
+            # 1. İL SEÇİMİ (VARSAYILAN: ÖNCE İL SEÇİNİZ)
+            il_options = ["Önce İl Seçiniz", "Tüm İller"] + sorted(list(set(TURKIYE_ILLERI + df['İl'].unique().tolist())))
             selected_il = st.selectbox("İl", il_options, index=0, key="f_il")
             
-            # DİNAMİK İLÇE HİYERARŞİSİ FIX
-            if selected_il == "Tüm İller":
-                ilce_options = sorted(df['İlçe'].unique().tolist())
+            # 2. İLÇE SEÇİMİ (İL SEÇİLMEDEN LİSTELENMEZ)
+            if selected_il == "Önce İl Seçiniz":
+                ilce_list = ["Önce İl Seçiniz"]
+            elif selected_il == "Tüm İller":
+                ilce_list = ["Tüm İlçeler"] + sorted(df['İlçe'].unique().tolist())
             else:
                 ilce_options = sorted(df[df['İl'] == selected_il]['İlçe'].unique().tolist())
-            
-            if len(ilce_options) == 0:
-                ilce_list = ["Seçilen İlde Kayıtlı İlçe Yok"]
-            else:
-                ilce_list = ["Tüm İlçeler"] + ilce_options
+                if len(ilce_options) == 0:
+                    ilce_list = ["Seçilen İlde Kayıtlı İlçe Yok"]
+                else:
+                    ilce_list = ["Tüm İlçeler"] + ilce_options
                 
             selected_ilce = st.selectbox("İlçe", ilce_list, key="f_ilce")
             
-            # DİNAMİK MAHALLE HİYERARŞİSİ FIX
-            if selected_ilce in ["Tüm İlçeler", "Seçilen İlde Kayıtlı İlçe Yok"]:
+            # 3. MAHALLE SEÇİMİ (İLÇE SEÇİLMEDEN LİSTELENMEZ)
+            if selected_ilce in ["Önce İl Seçiniz", "Seçilen İlde Kayıtlı İlçe Yok"]:
+                mahalle_list = ["Önce İlçe Seçiniz"]
+            elif selected_ilce == "Tüm İlçeler":
                 if selected_il == "Tüm İller":
-                    mahalle_options = sorted(df['Mahalle'].unique().tolist())
+                    mahalle_list = ["Tüm Mahalleler"] + sorted(df['Mahalle'].unique().tolist())
                 else:
-                    mahalle_options = sorted(df[df['İl'] == selected_il]['Mahalle'].unique().tolist())
+                    mahalle_list = ["Tüm Mahalleler"] + sorted(df[df['İl'] == selected_il]['Mahalle'].unique().tolist())
             else:
                 mahalle_options = sorted(df[(df['İlçe'] == selected_ilce) & (df['İl'] == selected_il if selected_il != "Tüm İller" else True)]['Mahalle'].unique().tolist())
-            
-            if len(mahalle_options) == 0:
-                mahalle_list = ["Kayıtlı Mahalle Yok"]
-            else:
-                mahalle_list = ["Tüm Mahalleler"] + mahalle_options
+                if len(mahalle_options) == 0:
+                    mahalle_list = ["Kayıtlı Mahalle Yok"]
+                else:
+                    mahalle_list = ["Tüm Mahalleler"] + mahalle_options
 
             selected_mahalle = st.selectbox("Mahalle", mahalle_list, key="f_mahalle")
 
@@ -327,10 +327,14 @@ if menu_secim == "İlan Arama ve Filtreleme":
             f_sifir = st.checkbox("Sıfır / Yeni Bina", key="c_sifir")
 
     filtered = df.copy()
-    if selected_il != "Tüm İller": filtered = filtered[filtered['İl'] == selected_il]
-    if selected_ilce not in ["Tüm İlçeler", "Seçilen İlde Kayıtlı İlçe Yok"]: filtered = filtered[filtered['İlçe'] == selected_ilce]
-    if selected_mahalle not in ["Tüm Mahalleler", "Kayıtlı Mahalle Yok"]: filtered = filtered[filtered['Mahalle'] == selected_mahalle]
-    if selected_oda != "Tümü": filtered = filtered[filtered['Oda Düzeni'] == selected_oda]
+    if selected_il not in ["Önce İl Seçiniz", "Tüm İller"]:
+        filtered = filtered[filtered['İl'] == selected_il]
+    if selected_ilce not in ["Tüm İlçeler", "Önce İl Seçiniz", "Seçilen İlde Kayıtlı İlçe Yok"]:
+        filtered = filtered[filtered['İlçe'] == selected_ilce]
+    if selected_mahalle not in ["Tüm Mahalleler", "Önce İlçe Seçiniz", "Kayıtlı Mahalle Yok"]:
+        filtered = filtered[filtered['Mahalle'] == selected_mahalle]
+    if selected_oda != "Tümü":
+        filtered = filtered[filtered['Oda Düzeni'] == selected_oda]
 
     filtered = filtered[(filtered['m² (Brüt)'] >= m2_range[0]) & (filtered['m² (Brüt)'] <= m2_range[1]) & (filtered['Fiyat'] <= budget)]
 
@@ -428,17 +432,20 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
     st.markdown("""
     <div class="content-card">
         <h4>Taşınmaz Parametre Girişi</h4>
-        Değerlemesi yapılacak taşınmazın fiziksel ve konum bilgilerini giriniz. Yapay zeka değerlemesi sadece veritabanında kayıtlı bölgeler için aktif çalışır.
+        Değerlemesi yapılacak taşınmazın fiziksel ve konum bilgilerini giriniz. Lütfen önce il seçimini yapınız.
     </div>
     """, unsafe_allow_html=True)
 
     c_deg1, c_deg2, c_deg3 = st.columns(3)
     with c_deg1:
-        # DEĞERLEME MODÜLÜNDE SADECE VERİSİ OLAN İLLERİ LİSTELEME
-        available_iller = sorted(df['İl'].unique().tolist())
+        available_iller = ["Önce İl Seçiniz"] + sorted(df['İl'].unique().tolist())
         s_il = st.selectbox("İl", available_iller, index=0, key="val_il")
         
-        s_ilce_options = sorted(df[df['İl'] == s_il]['İlçe'].unique().tolist())
+        if s_il == "Önce İl Seçiniz":
+            s_ilce_options = ["Önce İl Seçiniz"]
+        else:
+            s_ilce_options = sorted(df[df['İl'] == s_il]['İlçe'].unique().tolist())
+            
         s_ilce = st.selectbox("İlçe", s_ilce_options, key="val_ilce")
     with c_deg2:
         s_brut = st.number_input("Brüt Kullanım Alanı (m²)", 30, 800, 120, key="val_brut")
@@ -459,70 +466,73 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
 
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("Değerleme Raporunu Hesapla", type="primary", use_container_width=True):
-        benzer = df[df['İlçe'] == s_ilce]['Semt'].mode()
-        semt_degeri = benzer.iloc[0] if len(benzer) > 0 else s_ilce
+        if s_il == "Önce İl Seçiniz" or s_ilce == "Önce İl Seçiniz":
+            st.warning("Lütfen değerleme hesabı yapabilmek için geçerli bir il ve ilçe seçiniz.")
+        else:
+            benzer = df[df['İlçe'] == s_ilce]['Semt'].mode()
+            semt_degeri = benzer.iloc[0] if len(benzer) > 0 else s_ilce
 
-        toplam_o = s_oda + s_salon
-        m2_per_o = s_brut / max(toplam_o, 1)
+            toplam_o = s_oda + s_salon
+            m2_per_o = s_brut / max(toplam_o, 1)
 
-        input_data = pd.DataFrame([{
-            'm² (Brüt)': s_brut,
-            'oda_sayisi': float(s_oda),
-            'salon_sayisi': float(s_salon),
-            'm2_per_oda': m2_per_o,
-            'Semt': semt_degeri
-        }])
+            input_data = pd.DataFrame([{
+                'm² (Brüt)': s_brut,
+                'oda_sayisi': float(s_oda),
+                'salon_sayisi': float(s_salon),
+                'm2_per_oda': m2_per_o,
+                'Semt': semt_degeri
+            }])
 
-        pred_mid = float(np.expm1(model_mid.predict(input_data)[0]))
-        pred_low = float(np.expm1(model_low.predict(input_data)[0]))
-        pred_high = float(np.expm1(model_high.predict(input_data)[0]))
-        
-        multiplier = 1.0
-        if s_site: multiplier *= 1.04
-        if s_havuz: multiplier *= 1.03
-        if s_otopark: multiplier *= 1.02
-        if s_ebeveyn: multiplier *= 1.02
-        if s_sifir: multiplier *= 1.05
+            pred_mid = float(np.expm1(model_mid.predict(input_data)[0]))
+            pred_low = float(np.expm1(model_low.predict(input_data)[0]))
+            pred_high = float(np.expm1(model_high.predict(input_data)[0]))
+            
+            multiplier = 1.0
+            if s_site: multiplier *= 1.04
+            if s_havuz: multiplier *= 1.03
+            if s_otopark: multiplier *= 1.02
+            if s_ebeveyn: multiplier *= 1.02
+            if s_sifir: multiplier *= 1.05
 
-        pred_mid *= multiplier
-        pred_low *= multiplier
-        pred_high *= multiplier
+            pred_mid *= multiplier
+            pred_low *= multiplier
+            pred_high *= multiplier
 
-        st.success("Değerleme Hesaplaması Tamamlandı")
-        
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Tahmini Piyasa Bedeli (%50)", f"{pred_mid:,.0f} TL")
-        m2.metric("Hızlı Satış Alt Bandı (%10)", f"{pred_low:,.0f} TL")
-        m3.metric("Maksimum Satış Bandı (%90)", f"{pred_high:,.0f} TL")
+            st.success("Değerleme Hesaplaması Tamamlandı")
+            
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Tahmini Piyasa Bedeli (%50)", f"{pred_mid:,.0f} TL")
+            m2.metric("Hızlı Satış Alt Bandı (%10)", f"{pred_low:,.0f} TL")
+            m3.metric("Maksimum Satış Bandı (%90)", f"{pred_high:,.0f} TL")
 
-        tahmini_aylik_kira = pred_mid / 220
-        amortisman_yil = pred_mid / (tahmini_aylik_kira * 12)
-        yillik_getiri_yuzde = ((tahmini_aylik_kira * 12) / pred_mid) * 100
+            tahmini_aylik_kira = pred_mid / 220
+            amortisman_yil = pred_mid / (tahmini_aylik_kira * 12)
+            yillik_getiri_yuzde = ((tahmini_aylik_kira * 12) / pred_mid) * 100
 
-        st.divider()
-        st.markdown("### Yatırım ve Amortisman Analizi")
-        y1, y2, y3 = st.columns(3)
-        y1.metric("Tahmini Aylık Kira Potansiyeli", f"{tahmini_aylik_kira:,.0f} TL/Ay")
-        y2.metric("Amortisman Süresi", f"{amortisman_yil:.1f} Yıl")
-        y3.metric("Yıllık Brüt Getiri Oranı", f"%{yillik_getiri_yuzde:.2f}")
+            st.divider()
+            st.markdown("### Yatırım ve Amortisman Analizi")
+            y1, y2, y3 = st.columns(3)
+            y1.metric("Tahmini Aylık Kira Potansiyeli", f"{tahmini_aylik_kira:,.0f} TL/Ay")
+            y2.metric("Amortisman Süresi", f"{amortisman_yil:.1f} Yıl")
+            y3.metric("Yıllık Brüt Getiri Oranı", f"%{yillik_getiri_yuzde:.2f}")
 
-        st.markdown(f"""
-        <div class="rapor-kart">
-            <h4>Gayrimenkul Değerleme ve Yatırım Özet Raporu</h4>
-            <p><strong>Rapor Tarihi:</strong> {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
-            <hr style="border-color: #374151;">
-            <p><strong>Konum:</strong> {s_il} / {s_ilce} | <strong>Kullanım Alanı:</strong> {s_brut} m² | <strong>Oda Düzeni:</strong> {s_oda}+{s_salon}</p>
-            <br>
-            <h5>Değerleme Sonuçları</h5>
-            <ul>
-                <li><strong>Tahmini Piyasa Satış Değeri:</strong> {pred_mid:,.0f} TL</li>
-                <li><strong>Tahmini Aylık Kira Değeri:</strong> {tahmini_aylik_kira:,.0f} TL / Ay</li>
-                <li><strong>Geri Dönüş (Amortisman) Süresi:</strong> Yaklaşık {amortisman_yil:.1f} Yıl</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
+            st.markdown(f"""
+            <div class="rapor-kart">
+                <h4>Gayrimenkul Değerleme ve Yatırım Özet Raporu</h4>
+                <p><strong>Rapor Tarihi:</strong> {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
+                <hr style="border-color: #374151;">
+                <p><strong>Konum:</strong> {s_il} / {s_ilce} | <strong>Kullanım Alanı:</strong> {s_brut} m² | <strong>Oda Düzeni:</strong> {s_oda}+{s_salon}</p>
+                <br>
+                <h5>Değerleme Sonuçları</h5>
+                <ul>
+                    <li><strong>Tahmini Piyasa Satış Değeri:</strong> {pred_mid:,.0f} TL</li>
+                    <li><strong>Tahmini Aylık Kira Değeri:</strong> {tahmini_aylik_kira:,.0f} TL / Ay</li>
+                    <li><strong>Geri Dönüş (Amortisman) Süresi:</strong> Yaklaşık {amortisman_yil:.1f} Yıl</li>
+                </ul>
+            </div>
+            """, unsafe_allow_html=True)
 
-        rapor_metni = f"""GAYRİMENKUL DEĞERLEME VE YATIRIM RAPORU
+            rapor_metni = f"""GAYRİMENKUL DEĞERLEME VE YATIRIM RAPORU
 Tarih: {datetime.now().strftime('%d/%m/%Y %H:%M')}
 
 1. TAŞINMAZ BİLGİLERİ
@@ -546,12 +556,12 @@ Yıllık Brüt Getiri Oranı: %{yillik_getiri_yuzde:.2f}
 -----------------------------------------
 Bu rapor otomatik algoritma tarafından üretilmiştir. Resmi ekspertiz raporu yerine geçmez.
 """
-        st.download_button(
-            label="Değerleme Raporunu Metin Dosyası Olarak İndir",
-            data=rapor_metni,
-            file_name=f"Gayrimenkul_Degerleme_Raporu_{s_ilce}_{datetime.now().strftime('%Y%m%d')}.txt",
-            mime="text/plain"
-        )
+            st.download_button(
+                label="Değerleme Raporunu Metin Dosyası Olarak İndir",
+                data=rapor_metni,
+                file_name=f"Gayrimenkul_Degerleme_Raporu_{s_ilce}_{datetime.now().strftime('%Y%m%d')}.txt",
+                mime="text/plain"
+            )
 
 # =========================================================
 # MODÜL 3: COĞRAFİ HARİTA ANALİZİ
@@ -562,15 +572,17 @@ elif menu_secim == "Coğrafi Harita Analizi":
 
     h_col1, h_col2 = st.columns(2)
     with h_col1:
-        map_il_options = ["Tüm İller"] + sorted(df['İl'].unique().tolist())
+        map_il_options = ["Önce İl Seçiniz", "Tüm İller"] + sorted(df['İl'].unique().tolist())
         map_il = st.selectbox("Harita İl Seçimi:", map_il_options, index=0, key="map_il")
     with h_col2:
-        if map_il == "Tüm İller":
-            map_ilce_options = sorted(df['İlçe'].unique().tolist())
+        if map_il == "Önce İl Seçiniz":
+            map_ilce_list = ["Önce İl Seçiniz"]
+        elif map_il == "Tüm İller":
+            map_ilce_list = ["Tüm İlçeler"] + sorted(df['İlçe'].unique().tolist())
         else:
             map_ilce_options = sorted(df[df['İl'] == map_il]['İlçe'].unique().tolist())
+            map_ilce_list = ["Tüm İlçeler"] + map_ilce_options if len(map_ilce_options) > 0 else ["Kayıtlı İlçe Yok"]
             
-        map_ilce_list = ["Tüm İlçeler"] + map_ilce_options if len(map_ilce_options) > 0 else ["Kayıtlı İlçe Yok"]
         map_ilce = st.selectbox("Harita İlçe Seçimi:", map_ilce_list, key="map_ilce")
 
     coords = {
@@ -580,8 +592,10 @@ elif menu_secim == "Coğrafi Harita Analizi":
     }
 
     map_filtered = df.copy()
-    if map_il != "Tüm İller": map_filtered = map_filtered[map_filtered['İl'] == map_il]
-    if map_ilce not in ["Tüm İlçeler", "Kayıtlı İlçe Yok"]: map_filtered = map_filtered[map_filtered['İlçe'] == map_ilce]
+    if map_il not in ["Önce İl Seçiniz", "Tüm İller"]: 
+        map_filtered = map_filtered[map_filtered['İl'] == map_il]
+    if map_ilce not in ["Tüm İlçeler", "Önce İl Seçiniz", "Kayıtlı İlçe Yok"]: 
+        map_filtered = map_filtered[map_filtered['İlçe'] == map_ilce]
 
     if len(map_filtered) == 0:
         st.warning("Seçilen lokasyonda haritada gösterilecek ilan kaydı bulunamadı.")
@@ -664,7 +678,7 @@ elif menu_secim == "Konut Kredisi Simülasyonu":
         
         st.divider()
         m1, m2, m3 = st.columns(3)
-        m1.metric("Gerekli Peşinat Tutarı", f"{pesinat_tutar:,.0f} TL")
+        m1.metric("Peşinat Tutarı", f"{pesinat_tutar:,.0f} TL")
         m2.metric("Kredi Tutarı", f"{kredi:,.0f} TL")
         m3.metric("Aylık Taksit Bedeli", f"{taksit:,.2f} TL")
         
