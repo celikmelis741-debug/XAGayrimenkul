@@ -74,7 +74,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("XAI Gayrimenkul Değerleme Platformu")
-st.caption("CatBoost + Öznitelik Mühendisliği & Dijital Raporlama Entegrasyonu")
+st.caption("CatBoost + Coğrafi Harita Analizi & Quantile Regression")
 
 # =========================================================
 # 2. VERİ VE MODEL
@@ -118,7 +118,7 @@ def basliktan_ozellik_cikar(baslik):
         oz.append("Isıtma Sistemi")
     return oz
 
-@st.cache_resource(show_spinner="Modeller eğitiliyor ve veri hazırlanıyor...")
+@st.cache_resource(show_spinner="Modeller eğitiliyor ve harita verileri hazırlanıyor...")
 def load_model_and_data():
     df = pd.read_excel(EXCEL_FILE)
     df = df.dropna(subset=['Fiyat', 'm² (Brüt)'])
@@ -278,9 +278,10 @@ if f_sifir:
 # =========================================================
 # 4. TABLAR
 # =========================================================
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "Piyasa İlanları",
     "Evimi Ne Kadara Satarım?",
+    "İnteraktif Harita",
     "Oda & Isı Haritası",
     "Model Açıklanabilirliği",
     "Performans & Kredi"
@@ -461,7 +462,6 @@ with tab2:
         m2.metric("Alt Bant Tahmini (%10 Quantile)", f"{pred_low:,.0f} TL")
         m3.metric("Üst Bant Tahmini (%90 Quantile)", f"{pred_high:,.0f} TL")
 
-        # DİJİTAL DEĞERLEME RAPOR KARTI
         st.markdown(f"""
         <div class="rapor-kart">
             <h3>📋 Gayrimenkul Değerleme Rapor Özeti</h3>
@@ -479,8 +479,53 @@ with tab2:
         </div>
         """, unsafe_allow_html=True)
 
-# -------------------- TAB 3 --------------------
+# -------------------- TAB 3 (GELİŞTİRME: İNTERAKTİF HARİTA) --------------------
 with tab3:
+    st.subheader("📍 İstanbul Gayrimenkul İlanları Haritası")
+    st.caption("Filtrelenen ilanların coğrafi dağılımı. Nokta büyüklüğü m²'yi, renk tonu fiyatı gösterir.")
+
+    coords = {
+        'Ataşehir': (40.9833, 29.1167), 'Kadıköy': (40.9903, 29.0275), 'Üsküdar': (41.0244, 29.0050),
+        'Beşiktaş': (41.0422, 29.0067), 'Şişli': (41.0600, 28.9870), 'Bakırköy': (40.9800, 28.8700),
+        'Bağcılar': (41.0339, 28.8579), 'Bahçelievler': (41.0003, 28.8638), 'Küçükçekmece': (40.9917, 28.7719),
+        'Avcılar': (40.9801, 28.7175), 'Esenyurt': (41.0342, 28.6801), 'Başakşehir': (41.0975, 28.8064),
+        'Maltepe': (40.9333, 29.1333), 'Kartal': (40.8886, 29.1856), 'Pendik': (40.8750, 29.2333),
+        'Ümraniye': (41.0256, 29.1244), 'Sancaktepe': (40.9900, 29.2300), 'Beylikdüzü': (40.9900, 28.6400),
+        'Arnavutköy': (41.1852, 28.7410), 'Hadımköy': (41.15, 28.60)
+    }
+
+    map_df = filtered.copy()
+    if len(map_df) > 0:
+        def get_coords(row):
+            for name, (lat, lon) in coords.items():
+                if name.lower() in str(row['İlçe']).lower() or name.lower() in str(row['Semt / Mahalle']).lower():
+                    return pd.Series([lat, lon])
+            return pd.Series([41.0082, 28.9784])
+
+        map_df[['lat', 'lon']] = map_df.apply(get_coords, axis=1)
+        np.random.seed(42)
+        map_df['lat'] += np.random.normal(0, 0.006, len(map_df))
+        map_df['lon'] += np.random.normal(0, 0.006, len(map_df))
+
+        fig_map = px.scatter_mapbox(
+            map_df.head(600),
+            lat="lat", lon="lon",
+            color="Fiyat", size="m² (Brüt)",
+            hover_name="İlan Başlığı",
+            hover_data={"İlçe": True, "Oda Düzeni": True, "Fiyat": ":,.0f TL", "lat": False, "lon": False},
+            color_continuous_scale="Reds",
+            size_max=12, zoom=9.5,
+            center={"lat": 41.02, "lon": 28.95},
+            mapbox_style="carto-darkmatter",
+            height=540
+        )
+        fig_map.update_layout(margin=dict(l=0, r=0, t=0, b=0), template="plotly_dark")
+        st.plotly_chart(fig_map, use_container_width=True)
+    else:
+        st.info("Haritada gösterilecek kriterlere uygun ilan bulunamadı.")
+
+# -------------------- TAB 4 --------------------
+with tab4:
     st.subheader("Oda Düzeni Dağılımı & Fiyat Isı Haritası")
     col_a, col_b = st.columns(2)
     with col_a:
@@ -511,8 +556,8 @@ with tab3:
     fig.update_layout(template="plotly_dark", height=520, title="İlçe × Oda Ortalama Fiyat Isı Haritası")
     st.plotly_chart(fig, use_container_width=True)
 
-# -------------------- TAB 4 --------------------
-with tab4:
+# -------------------- TAB 5 --------------------
+with tab5:
     st.subheader("Model Açıklanabilirliği")
     st.caption(f"R²: **%{model_r2*100:.2f}** | MAE: {model_mae:,.0f} TL | Veri: {len(df):,}")
     
@@ -526,8 +571,8 @@ with tab4:
     except:
         st.info("Öznitelik önem grafiği hesaplanamadı.")
 
-# -------------------- TAB 5 --------------------
-with tab5:
+# -------------------- TAB 6 --------------------
+with tab6:
     st.subheader("Model Performans Karşılaştırması")
     benchmark = pd.DataFrame([
         {"Model": "CatBoost (Bu Model)", "R²": f"%{model_r2*100:.2f}", "MAE": f"{model_mae:,.0f} TL", "RMSE": f"{model_rmse:,.0f} TL"},
