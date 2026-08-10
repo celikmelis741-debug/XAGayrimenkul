@@ -6,9 +6,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 import plotly.express as px
 import plotly.graph_objects as go
-import shap
 import re
-from fpdf import FPDF
 from datetime import datetime
 
 # =========================================================
@@ -65,11 +63,18 @@ st.markdown("""
         font-size: 0.85rem;
         margin: 3px 4px 3px 0;
     }
+    .rapor-kart {
+        background-color: #111827;
+        border: 1px solid #374151;
+        border-radius: 12px;
+        padding: 24px;
+        margin-top: 15px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 st.title("XAI Gayrimenkul Değerleme Platformu")
-st.caption("CatBoost + SHAP Model Açıklanabilirliği & PDF Raporlama Entegrasyonu")
+st.caption("CatBoost + Öznitelik Mühendisliği & Dijital Raporlama Entegrasyonu")
 
 # =========================================================
 # 2. VERİ VE MODEL
@@ -113,7 +118,7 @@ def basliktan_ozellik_cikar(baslik):
         oz.append("Isıtma Sistemi")
     return oz
 
-@st.cache_resource(show_spinner="Modeller ve SHAP açıklayıcılar eğitiliyor...")
+@st.cache_resource(show_spinner="Modeller eğitiliyor ve veri hazırlanıyor...")
 def load_model_and_data():
     df = pd.read_excel(EXCEL_FILE)
     df = df.dropna(subset=['Fiyat', 'm² (Brüt)'])
@@ -163,68 +168,29 @@ def load_model_and_data():
     )
     model_high.fit(X_train, y_train)
 
-    explainer = shap.TreeExplainer(model_mid)
-
     y_pred = np.expm1(model_mid.predict(X_test))
     y_true = np.expm1(y_test)
     r2 = r2_score(y_true, y_pred)
     mae = mean_absolute_error(y_true, y_pred)
     rmse = np.sqrt(mean_squared_error(y_true, y_pred))
 
-    return (model_mid, model_low, model_high), explainer, X_test, df, r2, mae, rmse
+    return (model_mid, model_low, model_high), df, r2, mae, rmse
 
 try:
-    models, explainer, X_test_sample, df, model_r2, model_mae, model_rmse = load_model_and_data()
+    models, df, model_r2, model_mae, model_rmse = load_model_and_data()
     model_mid, model_low, model_high = models
 except Exception as e:
     st.error(f"Veri yüklenirken hata: {e}")
     st.stop()
 
 def mesafe_etiket(m):
-    if m <= 800: return f"~{m} m (cok yakin)"
-    if m <= 1500: return f"~{m} m (yakin)"
+    if m <= 800: return f"~{m} m (çok yakın)"
+    if m <= 1500: return f"~{m} m (yakın)"
     if m <= 3000: return f"~{m} m (orta)"
     return f"~{m} m (uzak)"
 
 def has_ozellik(lst, aranan):
     return any(aranan.lower() in o.lower() for o in lst)
-
-# 3. ADIM GELİŞTİRMESİ: PDF OLUŞTURMA FONKSİYONU
-def generate_pdf_report(ilce, brut, oda, salon, pred_mid, pred_low, pred_high, ozellikler_list):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Helvetica", 'B', 18)
-    
-    # Başlık
-    pdf.cell(0, 10, "GAYRIMENKUL DEGERLEME RAPORU", ln=True, align='C')
-    pdf.set_font("Helvetica", 'I', 10)
-    pdf.cell(0, 10, f"Rapor Tarihi: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True, align='C')
-    pdf.ln(10)
-    
-    # Konut Bilgileri
-    pdf.set_font("Helvetica", 'B', 14)
-    pdf.cell(0, 8, "1. Konut Ozellikleri", ln=True)
-    pdf.set_font("Helvetica", '', 11)
-    pdf.cell(0, 6, f"- Ilce: {ilce}", ln=True)
-    pdf.cell(0, 6, f"- Brut Alan: {brut} m2", ln=True)
-    pdf.cell(0, 6, f"- Oda Duzen: {oda}+{salon}", ln=True)
-    pdf.cell(0, 6, f"- Ek Ozellikler: {', '.join(ozellikler_list) if ozellikler_list else 'Yok'}", ln=True)
-    pdf.ln(8)
-    
-    # Yapay Zeka Tahmin Sonuçları
-    pdf.set_font("Helvetica", 'B', 14)
-    pdf.cell(0, 8, "2. Yapay Zeka Degerleme Sonuclari", ln=True)
-    pdf.set_font("Helvetica", '', 11)
-    pdf.cell(0, 6, f"- Tahmini Piyasa Degeri (%50): {pred_mid:,.0f} TL", ln=True)
-    pdf.cell(0, 6, f"- Alt Bant Tahmini (%10 Quantile): {pred_low:,.0f} TL", ln=True)
-    pdf.cell(0, 6, f"- Ust Bant Tahmini (%90 Quantile): {pred_high:,.0f} TL", ln=True)
-    pdf.ln(12)
-    
-    # Bilgilendirme Notu
-    pdf.set_font("Helvetica", 'I', 9)
-    pdf.multi_cell(0, 5, "Not: Bu rapor CatBoost Quantile Regression ve XAI makine ogrenmesi modelleri tarafindan piyasa verileri analiz edilerek otomatik uretilmistir. Resmi ekspertiz raporu yerine gecmez.")
-    
-    return bytes(pdf.output())
 
 # =========================================================
 # 3. SIDEBAR
@@ -316,7 +282,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Piyasa İlanları",
     "Evimi Ne Kadara Satarım?",
     "Oda & Isı Haritası",
-    "Model Açıklanabilirliği (SHAP)",
+    "Model Açıklanabilirliği",
     "Performans & Kredi"
 ])
 
@@ -467,19 +433,19 @@ with tab2:
         multiplier = 1.0
         if s_site: 
             multiplier *= 1.04
-            secilen_ozellikler.append("Site icinde")
+            secilen_ozellikler.append("Site içinde")
         if s_havuz: 
             multiplier *= 1.03
             secilen_ozellikler.append("Havuzlu")
         if s_otopark: 
             multiplier *= 1.02
-            secilen_ozellikler.append("Otoparkli")
+            secilen_ozellikler.append("Otoparklı")
         if s_ebeveyn: 
             multiplier *= 1.02
             secilen_ozellikler.append("Ebeveyn Banyolu")
         if s_sifir: 
             multiplier *= 1.05
-            secilen_ozellikler.append("Sifir/Yeni")
+            secilen_ozellikler.append("Sıfır / Yeni")
 
         ulasim_med = ilce_df['ulasim_mesafe_m'].median() if len(ilce_df) else 2000
         if ulasim_med <= 1000:
@@ -495,60 +461,23 @@ with tab2:
         m2.metric("Alt Bant Tahmini (%10 Quantile)", f"{pred_low:,.0f} TL")
         m3.metric("Üst Bant Tahmini (%90 Quantile)", f"{pred_high:,.0f} TL")
 
-        # PDF İNDİRME BUTONU ENTEGRASYONU
-        pdf_bytes = generate_pdf_report(
-            ilce=s_ilce,
-            brut=s_brut,
-            oda=s_oda,
-            salon=s_salon,
-            pred_mid=pred_mid,
-            pred_low=pred_low,
-            pred_high=pred_high,
-            ozellikler_list=secilen_ozellikler
-        )
-
-        st.download_button(
-            label="📄 Değerleme Raporunu PDF Olarak İndir",
-            data=pdf_bytes,
-            file_name=f"Gayrimenkul_Degerleme_Raporu_{s_ilce}.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
-
-        st.divider()
-        st.subheader("💡 Yapay Zeka Fiyat Açıklaması (SHAP Analizi)")
-        st.caption("Aşağıdaki grafik, girdiğiniz her özelliğin tahmini fiyata yaptığı pozitif veya negatif etkiyi gösterir.")
-
-        try:
-            shap_vals = explainer.shap_values(input_data)[0]
-            feature_names = ['m² (Brüt)', 'Oda Sayısı', 'Salon Sayısı', 'Oda Başı m²', 'Semt / İlçe']
-            shap_tl = [pred_mid * val for val in shap_vals]
-            
-            shap_df = pd.DataFrame({
-                'Öznitelik': feature_names,
-                'Katkı (TL)': shap_tl
-            }).sort_values('Katkı (TL)', ascending=True)
-
-            colors = ['#EF4444' if x < 0 else '#10B981' for x in shap_df['Katkı (TL)']]
-
-            fig_shap = go.Figure(go.Bar(
-                x=shap_df['Katkı (TL)'],
-                y=shap_df['Öznitelik'],
-                orientation='h',
-                marker_color=colors,
-                text=[f"{x:+,.0f} TL" for x in shap_df['Katkı (TL)']],
-                textposition='outside'
-            ))
-            fig_shap.update_layout(
-                template="plotly_dark",
-                height=350,
-                title="Özelliklerin Fiyata Pozitif / Negatif Katkısı",
-                xaxis_title="Fiyata Etki (TL)",
-                yaxis_title="Özellik"
-            )
-            st.plotly_chart(fig_shap, use_container_width=True)
-        except Exception as e:
-            st.info("Bu ev için özel SHAP katkısı hesaplanamadı.")
+        # DİJİTAL DEĞERLEME RAPOR KARTI
+        st.markdown(f"""
+        <div class="rapor-kart">
+            <h3>📋 Gayrimenkul Değerleme Rapor Özeti</h3>
+            <p><strong>Tarih:</strong> {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
+            <hr style="border-color: #374151;">
+            <p><strong>Konum:</strong> {s_ilce} | <strong>Büyüklük:</strong> {s_brut} m² | <strong>Oda Düzeni:</strong> {s_oda}+{s_salon}</p>
+            <p><strong>Seçilen Özellikler:</strong> {', '.join(secilen_ozellikler) if secilen_ozellikler else 'Standart Özellikler'}</p>
+            <br>
+            <h4>💰 Yapay Zeka Fiyat Aralığı</h4>
+            <ul>
+                <li><strong>Tahmini Piyasa Değeri:</strong> {pred_mid:,.0f} TL</li>
+                <li><strong>Hızlı Satış Bandı (%10 Alt Bant):</strong> {pred_low:,.0f} TL</li>
+                <li><strong>Maksimum Satış Bandı (%90 Üst Bant):</strong> {pred_high:,.0f} TL</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
 
 # -------------------- TAB 3 --------------------
 with tab3:
@@ -584,27 +513,18 @@ with tab3:
 
 # -------------------- TAB 4 --------------------
 with tab4:
-    st.subheader("Model Açıklanabilirliği (SHAP)")
+    st.subheader("Model Açıklanabilirliği")
     st.caption(f"R²: **%{model_r2*100:.2f}** | MAE: {model_mae:,.0f} TL | Veri: {len(df):,}")
     
     try:
-        sample_x = X_test_sample.head(200)
-        shap_values_gen = explainer.shap_values(sample_x)
-        feature_names = ['m² (Brüt)', 'Oda Sayısı', 'Salon Sayısı', 'Oda Başı m²', 'Semt / İlçe']
-
-        abs_shap = np.abs(shap_values_gen).mean(axis=0)
-        f_df_shap = pd.DataFrame({'Öznitelik': feature_names, 'SHAP Önem Seviyesi': abs_shap}).sort_values('SHAP Önem Seviyesi')
-
-        fig_gen = px.bar(
-            f_df_shap, x='SHAP Önem Seviyesi', y='Öznitelik', orientation='h',
-            title="Tüm Veri Setinde Fiyata En Çok Yön Veren Faktörler (SHAP)",
-            color='SHAP Önem Seviyesi', color_continuous_scale='Viridis'
-        )
-        fig_gen.update_layout(template="plotly_dark", height=400)
-        st.plotly_chart(fig_gen, use_container_width=True)
-
-    except Exception as e:
-        st.info("Genel SHAP grafiği hesaplanırken bir hata oluştu.")
+        importance = model_mid.get_feature_importance()
+        names = ['m² (Brüt)', 'Oda Sayısı', 'Salon Sayısı', 'Oda Başı m²', 'Semt / İlçe']
+        f_df = pd.DataFrame({'Öznitelik': names[:len(importance)], 'Önem': importance}).sort_values('Önem')
+        fig = px.bar(f_df, x='Önem', y='Öznitelik', orientation='h', color='Önem', color_continuous_scale='Blues')
+        fig.update_layout(template="plotly_dark", height=380)
+        st.plotly_chart(fig, use_container_width=True)
+    except:
+        st.info("Öznitelik önem grafiği hesaplanamadı.")
 
 # -------------------- TAB 5 --------------------
 with tab5:
