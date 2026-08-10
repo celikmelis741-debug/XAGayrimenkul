@@ -59,7 +59,7 @@ st.title("XAI Gayrimenkul Değerleme Platformu")
 st.caption("CatBoost + Etiketli Filtreleme + Satıcı Değerleme")
 
 # =========================================================
-# 2. VERİ VE MODEL
+# 2. VERİ VE MODEL (Daha geniş temizlik)
 # =========================================================
 EXCEL_FILE = "ilanlar_oda_salon_rakam.xlsx"
 
@@ -67,9 +67,10 @@ EXCEL_FILE = "ilanlar_oda_salon_rakam.xlsx"
 def load_model_and_data():
     df = pd.read_excel(EXCEL_FILE)
 
+    # Daha geniş / dengeli temizlik
     df = df.dropna(subset=['Fiyat', 'm² (Brüt)'])
-    df = df[(df['m² (Brüt)'] >= 25) & (df['m² (Brüt)'] <= 450)]
-    df = df[df['Fiyat'] <= df['Fiyat'].quantile(0.985)]
+    df = df[(df['m² (Brüt)'] >= 20) & (df['m² (Brüt)'] <= 500)]
+    df = df[df['Fiyat'] <= df['Fiyat'].quantile(0.99)]   # sadece en pahalı %1 atılıyor
 
     etiket_cols = ['havuz', 'otopark', 'balkon', 'manzara', 'site', 'dubleks',
                    'asansor', 'sifir', 'teras', 'bahce', 'guvenlik']
@@ -218,6 +219,8 @@ with tab1:
         st.success(f"**{len(filtered)}** ilan bulundu")
 
     st.subheader(f"Filtrelenen İlanlar ({len(filtered)} adet)")
+    st.caption(f"Toplam temizlenmiş veri: **{len(df)}** ilan")
+
     if len(filtered) == 0:
         st.warning("Kriterlere uygun ilan yok.")
     else:
@@ -237,7 +240,7 @@ with tab2:
     with col1:
         s_ilce = st.selectbox("İlçe", sorted(df['İlçe'].unique().tolist()), key="s_ilce")
         s_net = st.number_input("Net m²", 30, 400, 95, key="s_net")
-        s_brut = st.number_input("Brüt m²", 40, 450, 115, key="s_brut")
+        s_brut = st.number_input("Brüt m²", 40, 500, 115, key="s_brut")
 
     with col2:
         s_oda = st.selectbox("Oda Sayısı", [1, 2, 3, 4, 5, 6], index=2, key="s_oda")
@@ -255,7 +258,6 @@ with tab2:
         s_sifir = st.checkbox("Sıfır / Yeni Bina", False, key="s_sifir")
 
     if st.button("Satış Fiyatımı Hesapla", type="primary", use_container_width=True):
-        # En yakın semt bilgisini bul (basit yaklaşım)
         benzer_semt = df[df['İlçe'] == s_ilce]['Semt'].mode()
         semt_degeri = benzer_semt.iloc[0] if len(benzer_semt) > 0 else s_ilce
 
@@ -275,7 +277,6 @@ with tab2:
 
         pred = float(np.expm1(model.predict(input_data)[0]))
 
-        # Özelliklere göre küçük düzeltmeler
         if s_site: pred *= 1.03
         if s_asansor: pred *= 1.015
         if s_balkon: pred *= 1.01
@@ -283,8 +284,8 @@ with tab2:
         if s_otopark: pred *= 1.02
         if s_sifir: pred *= 1.05
 
-        hizli_satis = pred * 0.93      # Hızlı satmak için
-        max_satis = pred * 1.08        # Maksimum makul fiyat
+        hizli_satis = pred * 0.93
+        max_satis = pred * 1.08
 
         st.success("Hesaplama tamamlandı")
         st.markdown("---")
@@ -323,7 +324,7 @@ with tab3:
     np.random.seed(42)
     map_df['lat'] += np.random.normal(0, 0.007, len(map_df))
     map_df['lon'] += np.random.normal(0, 0.007, len(map_df))
-    fig = px.scatter_mapbox(map_df.sample(min(600, len(map_df))), lat="lat", lon="lon",
+    fig = px.scatter_mapbox(map_df.sample(min(700, len(map_df))), lat="lat", lon="lon",
                             color="Fiyat", size="m² (Brüt)", hover_name="İlçe",
                             color_continuous_scale="Reds", size_max=11, zoom=9.3,
                             center={"lat": 41.02, "lon": 28.95}, mapbox_style="carto-darkmatter", height=520)
