@@ -23,7 +23,6 @@ st.markdown("""
     .stApp { background-color: #0B0F19; color: #E2E8F0; }
     h1, h2, h3, h4 { color: #F8FAFC !important; font-weight: 600 !important; }
     
-    /* Metrik Kartları */
     div[data-testid="stMetric"] {
         background: #111827;
         border: 1px solid #1F2937;
@@ -35,13 +34,11 @@ st.markdown("""
         color: #3B82F6 !important; font-weight: 700 !important; font-size: 1.35rem !important;
     }
     
-    /* Sol Menü */
     section[data-testid="stSidebar"] {
         background-color: #0F172A;
         border-right: 1px solid #1E293B;
     }
     
-    /* Buton Tasarımı */
     .stButton > button {
         background-color: #2563EB;
         color: white;
@@ -55,7 +52,6 @@ st.markdown("""
         background-color: #1D4ED8;
     }
 
-    /* Özel Kart Alanları */
     .content-card {
         background-color: #111827;
         border: 1px solid #1F2937;
@@ -105,21 +101,16 @@ def basliktan_ozellik_cikar(baslik):
     t = str(baslik).upper()
     oz = []
     
-    # 1. DEPREM VE BİNA GÜVENLİĞİ NİTELİKLERİ
     if any(k in t for k in ['DEPREM YÖNETMELİĞİ', 'RADYE TEMEL', 'PERDE BETON', 'DEPREM ETÜDLÜ', 'C30', 'C35', 'ZEMİN ETÜDLÜ']):
         oz.append("Deprem Yönetmeliğine Uygun")
     if any(k in t for k in ['KENTSEL DÖNÜŞÜM', 'GÜÇLENDİRİLMİŞ', 'HASARSIZ']):
         oz.append("Kentsel Dönüşüm / Güçlendirilmiş")
-        
-    # 2. ULAŞIM VE LOKASYON
     if any(k in t for k in ['METRO', 'METROBUS', 'METROBÜS', 'MARMARAY', 'TRAMVAY']):
         oz.append("Ulaşım")
     if any(k in t for k in ['MARKET', 'ÇARŞI', 'AVM']):
         oz.append("Market / AVM")
     if any(k in t for k in ['MANZARA', 'DENİZ', 'BOĞAZ', 'ORMAN', 'GÖL']):
         oz.append("Manzara")
-        
-    # 3. BİNA VE DAİRE NİTELİKLERİ
     if any(k in t for k in ['SİTE', 'SITE']):
         oz.append("Site içinde")
     if any(k in t for k in ['HAVUZ', 'YÜZME HAVUZU']):
@@ -158,6 +149,17 @@ def load_model_and_data():
     df['oda_sayisi'] = pd.to_numeric(df['oda_sayisi'], errors='coerce').fillna(2).astype(int)
     df['salon_sayisi'] = pd.to_numeric(df['salon_sayisi'], errors='coerce').fillna(1).astype(int)
     df['Oda Düzeni'] = df['oda_sayisi'].astype(str) + '+' + df['salon_sayisi'].astype(str)
+
+    # LİNK SÜTUNU TESPİTİ
+    link_col = None
+    for col in df.columns:
+        if col.lower() in ['link', 'url', 'ilan_linki', 'ilan_url', 'sahibinden_link', 'web_site']:
+            link_col = col
+            break
+    if link_col:
+        df['İlan Bağlantısı'] = df[link_col].astype(str)
+    else:
+        df['İlan Bağlantısı'] = "https://www.sahibinden.com"
 
     if 'İl' in df.columns:
         df['İl'] = df['İl'].fillna('İstanbul').astype(str)
@@ -343,14 +345,14 @@ if menu_secim == "İlan Arama ve Filtreleme":
             f_market = st.selectbox("Ticari Alan / AVM", ["Tümü", "1.5 km'den yakın"], key="f_market")
             f_hastane = st.selectbox("Sağlık Kuruluşu", ["Tümü", "2 km'den yakın"], key="f_hastane")
 
-        st.markdown("##### 🛡️ Deprem Güvenliği & Yapı Nitelikleri")
+        st.markdown("##### Deprem Güvenliği ve Yapı Nitelikleri")
         d1, d2 = st.columns(2)
         with d1:
             f_deprem = st.checkbox("Deprem Yönetmeliğine Uygun / Radye Temel", key="c_deprem")
         with d2:
             f_kentsel = st.checkbox("Kentsel Dönüşüm / Güçlendirilmiş / Hasarsız", key="c_kentsel")
 
-        st.markdown("##### 🏢 Bina ve Konut Donatıları")
+        st.markdown("##### Bina ve Konut Donatıları")
         o1, o2, o3, o4 = st.columns(4)
         with o1:
             f_site = st.checkbox("Site Yerleşimi", key="c_site")
@@ -413,7 +415,7 @@ if menu_secim == "İlan Arama ve Filtreleme":
     if f_bahce: filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Bahçeli"))]
     if f_sifir: filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Sıfır"))]
 
-    arama = st.text_input("Metin Arama (İlan Başlığı / İlçe / Mahalle / Deprem / Radye)", placeholder="Örn: 3+1, Kadıköy, radye temel, ara kat, otopark...", key="arama_input")
+    arama = st.text_input("Metin Arama (İlan Başlığı / İlçe / Mahalle)", placeholder="Örn: 3+1, Kadıköy, radye temel, ara kat...", key="arama_input")
     if arama:
         metin = arama.lower().strip()
         filtered = filtered[
@@ -428,17 +430,24 @@ if menu_secim == "İlan Arama ve Filtreleme":
     else:
         show_df = filtered.head(40).copy()
         show_df['m² Birim Fiyatı'] = show_df['fiyat_m2'].apply(lambda x: f"{x:,.0f} TL")
-        show_cols = ['İlan Başlığı', 'İlçe', 'Mahalle', 'Oda Düzeni', 'm² (Brüt)', 'm² Birim Fiyatı', 'Fiyat']
+        show_cols = ['İlan Başlığı', 'İlçe', 'Mahalle', 'Oda Düzeni', 'm² (Brüt)', 'm² Birim Fiyatı', 'Fiyat', 'İlan Bağlantısı']
         
         event = st.dataframe(
             show_df[show_cols].style.format({'Fiyat': '{:,.0f} TL', 'm² (Brüt)': '{:.0f}'}),
+            column_config={
+                "İlan Bağlantısı": st.column_config.LinkColumn(
+                    "İlan Bağlantısı",
+                    help="İlanın orijinal kaynağını görüntüle",
+                    display_text="İlanı Aç"
+                )
+            },
             use_container_width=True, height=300,
             on_select="rerun", selection_mode="single-row", key="df_selection"
         )
 
         export_df = filtered.copy()
         export_df['m² Birim Fiyatı'] = export_df['fiyat_m2'].apply(lambda x: f"{x:,.0f} TL")
-        export_cols = ['İlan Başlığı', 'İl', 'İlçe', 'Mahalle', 'Oda Düzeni', 'm² (Brüt)', 'm² Birim Fiyatı', 'Fiyat']
+        export_cols = ['İlan Başlığı', 'İl', 'İlçe', 'Mahalle', 'Oda Düzeni', 'm² (Brüt)', 'm² Birim Fiyatı', 'Fiyat', 'İlan Bağlantısı']
         valid_export_cols = [c for c in export_cols if c in export_df.columns]
         
         csv_data = export_df[valid_export_cols].to_csv(index=False, encoding='utf-8-sig')
