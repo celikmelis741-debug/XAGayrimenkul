@@ -5,6 +5,8 @@ from catboost import CatBoostRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 import plotly.express as px
+import plotly.graph_objects as go
+import shap
 import re
 
 # =========================================================
@@ -65,7 +67,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("XAI Gayrimenkul Değerleme Platformu")
-st.caption("CatBoost (Quantile Regression) + Gelişmiş Öznitelik Mühendisliği & Mesafeli Değerleme")
+st.caption("CatBoost + SHAP Model Açıklanabilirliği & Quantile Regression")
 
 # =========================================================
 # 2. VERİ VE MODEL
@@ -77,15 +79,12 @@ def basliktan_ozellik_cikar(baslik):
         return []
     t = str(baslik).upper()
     oz = []
-    # Ulaşım & Konum
     if any(k in t for k in ['METRO', 'METROBUS', 'METROBÜS', 'MARMARAY']):
         oz.append("Ulaşım")
     if any(k in t for k in ['MARKET', 'ÇARŞI', 'AVM']):
         oz.append("Market / AVM")
     if any(k in t for k in ['MANZARA', 'DENİZ', 'BOĞAZ', 'ORMAN', 'GÖL']):
         oz.append("Manzara")
-    
-    # Bina & Tesis
     if any(k in t for k in ['SİTE', 'SITE']):
         oz.append("Site içinde")
     if any(k in t for k in ['HAVUZ', 'YÜZME HAVUZU']):
@@ -100,8 +99,6 @@ def basliktan_ozellik_cikar(baslik):
         oz.append("Asansör")
     if any(k in t for k in ['SIFIR', 'YENİ BİNA', 'PROJEDEN']):
         oz.append("Sıfır / Yeni")
-
-    # Daire İçi
     if any(k in t for k in ['EBEVEYN', 'EBEVEYN BANYO']):
         oz.append("Ebeveyn Banyolu")
     if any(k in t for k in ['BALKON', 'TERAS', 'VERANDA']):
@@ -112,10 +109,9 @@ def basliktan_ozellik_cikar(baslik):
         oz.append("Bahçeli / Bahçe Katı")
     if any(k in t for k in ['YERDEN ISITMA', 'KOMBİ', 'MERKEZİ ISITMA']):
         oz.append("Isıtma Sistemi")
-
     return oz
 
-@st.cache_resource(show_spinner="Modeller eğitiliyor ve veri hazırlanıyor...")
+@st.cache_resource(show_spinner="Modeller ve SHAP açıklayıcılar eğitiliyor...")
 def load_model_and_data():
     df = pd.read_excel(EXCEL_FILE)
     df = df.dropna(subset=['Fiyat', 'm² (Brüt)'])
@@ -126,10 +122,9 @@ def load_model_and_data():
     df['Mahalle'] = df['Mahalle'].fillna('Bilinmiyor').astype(str)
     df['Semt'] = df['Semt / Mahalle'].astype(str)
 
-    # 1. ADIM GELİŞTİRMESİ: ÖZNİTELİK MÜHENDİSLİĞİ (FEATURE ENGINEERING)
-    df['fiyat_m2'] = df['Fiyat'] / df['m² (Brüt)'] # m² birim fiyatı
+    df['fiyat_m2'] = df['Fiyat'] / df['m² (Brüt)']
     df['toplam_oda'] = df['oda_sayisi'] + df['salon_sayisi']
-    df['m2_per_oda'] = df['m² (Brüt)'] / df['toplam_oda'].clip(lower=1) # Oda başı ferahlık m²'si
+    df['m2_per_oda'] = df['m² (Brüt)'] / df['toplam_oda'].clip(lower=1)
 
     for col in ['ulasim_mesafe_m', 'market_mesafe_m', 'hastane_mesafe_m', 'okul_mesafe_m', 'taksi_mesafe_m', 'metro_mesafe_m']:
         if col in df.columns:
@@ -146,15 +141,14 @@ def load_model_and_data():
 
     X_train, X_test, y_train, y_test = train_test_split(X, y_log, test_size=0.2, random_state=42)
     
-    # Ana Tahmin Modeli (Ortanca / Median)
+    # Ana Model
     model_mid = CatBoostRegressor(
         iterations=600, learning_rate=0.05, depth=6,
         cat_features=['Semt'], verbose=0, random_seed=42
     )
     model_mid.fit(X_train, y_train)
 
-    # 1. ADIM GELİŞTİRMESİ: CATBOOST QUANTILE REGRESSION (GÜVEN ARALIĞI)
-    # Alt Bant Modeli (%10 Quantile)
+    # Quantile Modelleri
     model_low = CatBoostRegressor(
         iterations=600, learning_rate=0.05, depth=6,
         loss_function='Quantile:alpha=0.10',
@@ -162,7 +156,6 @@ def load_model_and_data():
     )
     model_low.fit(X_train, y_train)
 
-    # Üst Bant Modeli (%90 Quantile)
     model_high = CatBoostRegressor(
         iterations=600, learning_rate=0.05, depth=6,
         loss_function='Quantile:alpha=0.90',
@@ -170,16 +163,19 @@ def load_model_and_data():
     )
     model_high.fit(X_train, y_train)
 
+    # SHAP Explainer
+    explainer = shap.TreeExplainer(model_mid)
+
     y_pred = np.expm1(model_mid.predict(X_test))
     y_true = np.expm1(y_test)
     r2 = r2_score(y_true, y_pred)
     mae = mean_absolute_error(y_true, y_pred)
     rmse = np.sqrt(mean_squared_error(y_true, y_pred))
 
-    return (model_mid, model_low, model_high), df, r2, mae, rmse
+    return (model_mid, model_low, model_high), explainer, X_test, df, r2, mae, rmse
 
 try:
-    models, df, model_r2, model_mae, model_rmse = load_model_and_data()
+    models, explainer, X_test_sample, df, model_r2, model_mae, model_rmse = load_model_and_data()
     model_mid, model_low, model_high = models
 except Exception as e:
     st.error(f"Veri yüklenirken hata: {e}")
@@ -234,7 +230,6 @@ f_bahce = st.sidebar.checkbox("Bahçeli / Bahçe Katı", key="f_bahce")
 f_guvenlik = st.sidebar.checkbox("Güvenlikli", key="f_guvenlik")
 f_sifir = st.sidebar.checkbox("Sıfır / Yeni", key="f_sifir")
 
-# Filtreleme
 filtered = df.copy()
 if selected_ilce != "Tüm İlçeler":
     filtered = filtered[filtered['İlçe'] == selected_ilce]
@@ -285,7 +280,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Piyasa İlanları",
     "Evimi Ne Kadara Satarım?",
     "Oda & Isı Haritası",
-    "Model Açıklanabilirliği",
+    "Model Açıklanabilirliği (SHAP)",
     "Performans & Kredi"
 ])
 
@@ -396,12 +391,10 @@ with tab2:
             'Semt': semt_degeri
         }])
 
-        # QUANTILE MODEL TAHMİNLERİ
         pred_mid = float(np.expm1(model_mid.predict(input_data)[0]))
         pred_low = float(np.expm1(model_low.predict(input_data)[0]))
         pred_high = float(np.expm1(model_high.predict(input_data)[0]))
         
-        # Özellik Prim Oranları Entegrasyonu
         multiplier = 1.0
         if s_site: multiplier *= 1.04
         if s_havuz: multiplier *= 1.03
@@ -417,19 +410,49 @@ with tab2:
         pred_low *= multiplier
         pred_high *= multiplier
 
-        st.success("Quantile Regression Modeli ile İstatistiksel Hesaplama Tamamlandı")
+        st.success("Hesaplama Tamamlandı")
         m1, m2, m3 = st.columns(3)
         m1.metric("Tahmini Piyasa Değeri (%50)", f"{pred_mid:,.0f} TL")
         m2.metric("Alt Bant Tahmini (%10 Quantile)", f"{pred_low:,.0f} TL")
         m3.metric("Üst Bant Tahmini (%90 Quantile)", f"{pred_high:,.0f} TL")
 
-        st.markdown("#### Bu ilçede ortalama yakınlık")
-        k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Ulaşım", mesafe_etiket(int(ulasim_med)))
-        k2.metric("Market", mesafe_etiket(int(ilce_df['market_mesafe_m'].median())))
-        k3.metric("Hastane", mesafe_etiket(int(ilce_df['hastane_mesafe_m'].median())))
-        k4.metric("Okul", mesafe_etiket(int(ilce_df['okul_mesafe_m'].median())))
-        st.caption("Mesafeler semt merkezi bazlı yaklaşıktır.")
+        # 2. ADIM GELİŞTİRMESİ: BİREYSEL İLAN SHAP DEĞERLERİ İLE FİYAT AÇIKLAMASI
+        st.divider()
+        st.subheader("💡 Yapay Zeka Fiyat Açıklaması (SHAP Analizi)")
+        st.caption("Aşağıdaki grafik, girdiğiniz her özelliğin tahmini fiyata yaptığı pozitif veya negatif etkiyi gösterir.")
+
+        try:
+            shap_vals = explainer.shap_values(input_data)[0]
+            feature_names = ['m² (Brüt)', 'Oda Sayısı', 'Salon Sayısı', 'Oda Başı m²', 'Semt / İlçe']
+            
+            # Log bazlı SHAP değerlerini yaklaşık TL etkisine çevirme
+            shap_tl = [pred_mid * val for val in shap_vals]
+            
+            shap_df = pd.DataFrame({
+                'Öznitelik': feature_names,
+                'Katkı (TL)': shap_tl
+            }).sort_values('Katkı (TL)', ascending=True)
+
+            colors = ['#EF4444' if x < 0 else '#10B981' for x in shap_df['Katkı (TL)']]
+
+            fig_shap = go.Figure(go.Bar(
+                x=shap_df['Katkı (TL)'],
+                y=shap_df['Öznitelik'],
+                orientation='h',
+                marker_color=colors,
+                text=[f"{x:+,.0f} TL" for x in shap_df['Katkı (TL)']],
+                textposition='outside'
+            ))
+            fig_shap.update_layout(
+                template="plotly_dark",
+                height=350,
+                title="Özelliklerin Fiyata Pozitif / Negatif Katkısı",
+                xaxis_title="Fiyata Etki (TL)",
+                yaxis_title="Özellik"
+            )
+            st.plotly_chart(fig_shap, use_container_width=True)
+        except Exception as e:
+            st.info("Bu ev için özel SHAP katkısı hesaplanamadı.")
 
 # -------------------- TAB 3 --------------------
 with tab3:
@@ -465,17 +488,29 @@ with tab3:
 
 # -------------------- TAB 4 --------------------
 with tab4:
-    st.subheader("Model Açıklanabilirliği")
+    st.subheader("Model Açıklanabilirliği (SHAP)")
     st.caption(f"R²: **%{model_r2*100:.2f}** | MAE: {model_mae:,.0f} TL | Veri: {len(df):,}")
+    
+    # 2. ADIM GELİŞTİRMESİ: GENEL MODEL SHAP DEĞERLERİ
     try:
-        importance = model_mid.get_feature_importance()
-        names = ['m² (Brüt)', 'Oda Sayısı', 'Salon Sayısı', 'Oda Başı m²', 'Semt / İlçe']
-        f_df = pd.DataFrame({'Öznitelik': names[:len(importance)], 'Önem': importance}).sort_values('Önem')
-        fig = px.bar(f_df, x='Önem', y='Öznitelik', orientation='h', color='Önem', color_continuous_scale='Blues')
-        fig.update_layout(template="plotly_dark", height=380)
-        st.plotly_chart(fig, use_container_width=True)
-    except:
-        st.info("Grafik hesaplanamadı.")
+        sample_x = X_test_sample.head(200)
+        shap_values_gen = explainer.shap_values(sample_x)
+        feature_names = ['m² (Brüt)', 'Oda Sayısı', 'Salon Sayısı', 'Oda Başı m²', 'Semt / İlçe']
+
+        # Mutlak SHAP önem seviyesi
+        abs_shap = np.abs(shap_values_gen).mean(axis=0)
+        f_df_shap = pd.DataFrame({'Öznitelik': feature_names, 'SHAP Önem Seviyesi': abs_shap}).sort_values('SHAP Önem Seviyesi')
+
+        fig_gen = px.bar(
+            f_df_shap, x='SHAP Önem Seviyesi', y='Öznitelik', orientation='h',
+            title="Tüm Veri Setinde Fiyata En Çok Yön Veren Faktörler (SHAP)",
+            color='SHAP Önem Seviyesi', color_continuous_scale='Viridis'
+        )
+        fig_gen.update_layout(template="plotly_dark", height=400)
+        st.plotly_chart(fig_gen, use_container_width=True)
+
+    except Exception as e:
+        st.info("Genel SHAP grafiği hesaplanırken bir hata oluştu.")
 
 # -------------------- TAB 5 --------------------
 with tab5:
