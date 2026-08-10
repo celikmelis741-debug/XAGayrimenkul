@@ -65,7 +65,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("XAI Gayrimenkul Değerleme Platformu")
-st.caption("CatBoost + Ulaşım / Market / Hastane / Okul mesafeli değerleme")
+st.caption("CatBoost + Ulaşım / Konfor Mesafeli ve Gelişmiş Özellikli Değerleme")
 
 # =========================================================
 # 2. VERİ VE MODEL
@@ -77,24 +77,42 @@ def basliktan_ozellik_cikar(baslik):
         return []
     t = str(baslik).upper()
     oz = []
+    # Ulaşım & Konum
     if any(k in t for k in ['METRO', 'METROBUS', 'METROBÜS', 'MARMARAY']):
-        oz.append("Ulaşım (başlıkta)")
+        oz.append("Ulaşım")
     if any(k in t for k in ['MARKET', 'ÇARŞI', 'AVM']):
-        oz.append("Market (başlıkta)")
+        oz.append("Market / AVM")
+    if any(k in t for k in ['MANZARA', 'DENİZ', 'BOĞAZ', 'ORMAN', 'GÖL']):
+        oz.append("Manzara")
+    
+    # Bina & Tesis
     if any(k in t for k in ['SİTE', 'SITE']):
         oz.append("Site içinde")
-    if any(k in t for k in ['OTOPARK', 'GARAJ']):
-        oz.append("Otopark")
-    if any(k in t for k in ['HAVUZ']):
+    if any(k in t for k in ['HAVUZ', 'YÜZME HAVUZU']):
         oz.append("Havuz")
-    if any(k in t for k in ['SIFIR', 'YENİ BİNA', 'PROJEDEN']):
-        oz.append("Sıfır / Yeni")
-    if any(k in t for k in ['MANZARA', 'DENİZ', 'BOĞAZ']):
-        oz.append("Manzara")
-    if any(k in t for k in ['BALKON', 'TERAS']):
-        oz.append("Balkon / Teras")
+    if any(k in t for k in ['OTOPARK', 'GARAJ', 'KAPALI OTOPARK']):
+        oz.append("Otopark")
+    if any(k in t for k in ['GÜVENLİK', '7/24', 'KAMERA']):
+        oz.append("Güvenlik")
+    if any(k in t for k in ['FITNESS', 'SPOR', 'SAUNA', 'SPA', 'SOSYAL TESİS']):
+        oz.append("Spor Salonu / Tesis")
     if any(k in t for k in ['ASANSÖR', 'ASANSOR']):
         oz.append("Asansör")
+    if any(k in t for k in ['SIFIR', 'YENİ BİNA', 'PROJEDEN']):
+        oz.append("Sıfır / Yeni")
+
+    # Daire İçi
+    if any(k in t for k in ['EBEVEYN', 'EBEVEYN BANYO']):
+        oz.append("Ebeveyn Banyolu")
+    if any(k in t for k in ['BALKON', 'TERAS', 'VERANDA']):
+        oz.append("Balkon / Teras")
+    if any(k in t for k in ['DUBLEKS', 'DUPLEX', 'TRİPLEKS']):
+        oz.append("Dubleks")
+    if any(k in t for k in ['BAHÇE KATI', 'BAHÇELİ', 'BAHCE']):
+        oz.append("Bahçeli / Bahçe Katı")
+    if any(k in t for k in ['YERDEN ISITMA', 'KOMBİ', 'MERKEZİ ISITMA']):
+        oz.append("Isıtma Sistemi")
+
     return oz
 
 @st.cache_resource(show_spinner="Model ve veriler yükleniyor...")
@@ -147,6 +165,9 @@ def mesafe_etiket(m):
     if m <= 3000: return f"~{m} m (orta)"
     return f"~{m} m (uzak)"
 
+def has_ozellik(lst, aranan):
+    return any(aranan.lower() in o.lower() for o in lst)
+
 # =========================================================
 # 3. SIDEBAR
 # =========================================================
@@ -177,8 +198,15 @@ f_hastane = st.sidebar.selectbox("Hastane", ["Tümü", "2 km'den yakın"], key="
 f_okul = st.sidebar.selectbox("Okul", ["Tümü", "2 km'den yakın"], key="f_okul")
 
 st.sidebar.markdown("---")
-f_site = st.sidebar.checkbox("Site içinde (başlıkta)", key="f_site")
-f_sifir = st.sidebar.checkbox("Sıfır / Yeni (başlıkta)", key="f_sifir")
+st.sidebar.subheader("Konut & Bina Özellikleri")
+f_site = st.sidebar.checkbox("Site içinde", key="f_site")
+f_havuz = st.sidebar.checkbox("Havuzlu", key="f_havuz")
+f_otopark = st.sidebar.checkbox("Otoparklı", key="f_otopark")
+f_ebeveyn = st.sidebar.checkbox("Ebeveyn Banyolu", key="f_ebeveyn")
+f_dubleks = st.sidebar.checkbox("Dubleks", key="f_dubleks")
+f_bahce = st.sidebar.checkbox("Bahçeli / Bahçe Katı", key="f_bahce")
+f_guvenlik = st.sidebar.checkbox("Güvenlikli", key="f_guvenlik")
+f_sifir = st.sidebar.checkbox("Sıfır / Yeni", key="f_sifir")
 
 # Filtreleme
 filtered = df.copy()
@@ -207,11 +235,20 @@ if f_hastane == "2 km'den yakın":
 if f_okul == "2 km'den yakın":
     filtered = filtered[filtered['okul_mesafe_m'] <= 2000]
 
-def has_ozellik(lst, aranan):
-    return any(aranan.lower() in o.lower() for o in lst)
-
 if f_site:
-    filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Site"))]
+    filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Site içinde"))]
+if f_havuz:
+    filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Havuz"))]
+if f_otopark:
+    filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Otopark"))]
+if f_ebeveyn:
+    filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Ebeveyn Banyolu"))]
+if f_dubleks:
+    filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Dubleks"))]
+if f_bahce:
+    filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Bahçeli"))]
+if f_guvenlik:
+    filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Güvenlik"))]
 if f_sifir:
     filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Sıfır"))]
 
@@ -229,7 +266,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 # -------------------- TAB 1 --------------------
 with tab1:
     st.subheader("Akıllı Arama")
-    arama = st.text_input("Ne arıyorsunuz?", placeholder="3+1, Ataşehir, metro, market...", key="arama")
+    arama = st.text_input("Ne arıyorsunuz?", placeholder="3+1, havuzlu, Ataşehir, metro, ebeveyn banyolu...", key="arama")
 
     if arama:
         metin = arama.lower().strip()
@@ -256,36 +293,48 @@ with tab1:
         show_df['Ulaşım'] = show_df['ulasim_mesafe_m'].apply(lambda x: f"~{x}m")
         show_df['Market'] = show_df['market_mesafe_m'].apply(lambda x: f"~{x}m")
         show_cols = ['İlan Başlığı', 'İlçe', 'Oda Düzeni', 'm² (Brüt)', 'Ulaşım', 'Market', 'Fiyat']
-        st.dataframe(
+        
+        # Tablodan doğrudan tıklama kontrolü
+        event = st.dataframe(
             show_df[show_cols].style.format({'Fiyat': '{:,.0f} TL', 'm² (Brüt)': '{:.0f}'}),
-            use_container_width=True, height=300
+            use_container_width=True, height=300,
+            on_select="rerun",
+            selection_mode="single-row",
+            key="df_selection"
         )
 
+        selected_rows = event.get("selection", {}).get("rows", [])
+        
         st.divider()
         st.subheader("İlan Detayı & Yakınlık Bilgileri")
-        secilen = st.selectbox("İlan seçin", filtered['İlan Başlığı'].head(40).tolist(), key="ilan_sec")
-        if secilen:
-            row = filtered[filtered['İlan Başlığı'] == secilen].iloc[0]
-            st.markdown(f"**{row['İlan Başlığı']}**")
-            st.caption(f"{row['İlçe']} / {row['Mahalle']}  |  {row['Oda Düzeni']}  |  {row['m² (Brüt)']} m²  |  {row['Fiyat']:,.0f} TL")
+        
+        if selected_rows:
+            selected_idx = selected_rows[0]
+            row = show_df.iloc[selected_idx]
+        else:
+            row = show_df.iloc[0] # Varsayılan olarak ilk ilanı göster
+            st.info("💡 Tablodan başka bir satıra tıklayarak o ilanın detayını inceleyebilirsiniz.")
 
-            st.markdown("#### Yakınlık (yaklaşık)")
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Toplu Ulaşım", mesafe_etiket(row['ulasim_mesafe_m']))
-            c2.metric("Market / AVM", mesafe_etiket(row['market_mesafe_m']))
-            c3.metric("Hastane", mesafe_etiket(row['hastane_mesafe_m']))
-            c4, c5, c6 = st.columns(3)
-            c4.metric("Okul", mesafe_etiket(row['okul_mesafe_m']))
-            c5.metric("Taksi", mesafe_etiket(row['taksi_mesafe_m']))
-            c6.metric("Metro (eski)", mesafe_etiket(row.get('metro_mesafe_m', 9999)))
+        st.markdown(f"**{row['İlan Başlığı']}**")
+        st.caption(f"{row['İlçe']} / {row['Mahalle']}  |  {row['Oda Düzeni']}  |  {row['m² (Brüt)']} m²  |  {row['Fiyat']:,.0f} TL")
 
-            st.caption("Not: Mesafeler semt/mahalle merkezi bazlıdır. Kapı önü mesafesi değildir. Ulaşım = Metro + Metrobüs + Marmaray.")
+        st.markdown("#### Yakınlık (yaklaşık)")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Toplu Ulaşım", mesafe_etiket(row['ulasim_mesafe_m']))
+        c2.metric("Market / AVM", mesafe_etiket(row['market_mesafe_m']))
+        c3.metric("Hastane", mesafe_etiket(row['hastane_mesafe_m']))
+        c4, c5, c6 = st.columns(3)
+        c4.metric("Okul", mesafe_etiket(row['okul_mesafe_m']))
+        c5.metric("Taksi", mesafe_etiket(row['taksi_mesafe_m']))
+        c6.metric("Metro (eski)", mesafe_etiket(row.get('metro_mesafe_m', 9999)))
 
-            ozellikler = row['Ozellikler']
-            if ozellikler:
-                etiket_html = " ".join([f'<span class="ozellik-etiket">{o}</span>' for o in ozellikler])
-                st.markdown("**Başlıkta geçen özellikler:**", unsafe_allow_html=True)
-                st.markdown(etiket_html, unsafe_allow_html=True)
+        st.caption("Not: Mesafeler semt/mahalle merkezi bazlıdır. Kapı önü mesafesi değildir.")
+
+        ozellikler = row['Ozellikler']
+        if ozellikler:
+            etiket_html = " ".join([f'<span class="ozellik-etiket">{o}</span>' for o in ozellikler])
+            st.markdown("**Başlıkta geçen özellikler:**", unsafe_allow_html=True)
+            st.markdown(etiket_html, unsafe_allow_html=True)
 
 # -------------------- TAB 2 --------------------
 with tab2:
@@ -298,9 +347,11 @@ with tab2:
         s_oda = st.selectbox("Oda Sayısı", [1, 2, 3, 4, 5, 6, 7, 8], index=2, key="s_oda")
         s_salon = st.selectbox("Salon Sayısı", [0, 1, 2], index=1, key="s_salon")
     with col3:
-        st.write("**Özellikler**")
+        st.write("**Daire & Bina Özellikleri**")
         s_site = st.checkbox("Site içinde", key="s_site")
-        s_otopark = st.checkbox("Otopark", key="s_otopark")
+        s_havuz = st.checkbox("Havuzlu", key="s_havuz")
+        s_otopark = st.checkbox("Otoparklı", key="s_otopark")
+        s_ebeveyn = st.checkbox("Ebeveyn Banyolu", key="s_ebeveyn")
         s_sifir = st.checkbox("Sıfır / Yeni", key="s_sifir")
 
     if st.button("Satış Fiyatımı Hesapla", type="primary", use_container_width=True):
@@ -315,11 +366,15 @@ with tab2:
             'Semt': semt_degeri
         }])
         pred = float(np.expm1(model.predict(input_data)[0]))
-        if s_site: pred *= 1.03
+        
+        # Özellik Prim Oranları
+        if s_site: pred *= 1.04
+        if s_havuz: pred *= 1.03
         if s_otopark: pred *= 1.02
+        if s_ebeveyn: pred *= 1.02
         if s_sifir: pred *= 1.05
 
-        # Ulaşım yakınsa küçük prim
+        # Ulaşım Yakınlık Primi
         ulasim_med = ilce_df['ulasim_mesafe_m'].median() if len(ilce_df) else 2000
         if ulasim_med <= 1000:
             pred *= 1.025
