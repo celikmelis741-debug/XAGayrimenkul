@@ -109,7 +109,7 @@ except Exception as e:
     st.stop()
 
 # =========================================================
-# 3. SIDEBAR FİLTRELER
+# 3. SIDEBAR FİLTRELER (Geniş varsayılanlar)
 # =========================================================
 st.sidebar.header("Filtreler")
 
@@ -126,15 +126,17 @@ selected_mahalle = st.sidebar.selectbox("Mahalle", mahalle_list, key="mahalle_se
 oda_list = ["Tümü"] + sorted(df['Oda Düzeni'].unique().tolist())
 selected_oda = st.sidebar.selectbox("Oda Düzeni", oda_list, key="oda_sec")
 
+# Geniş m² varsayılanı
 min_m2, max_m2 = int(df['m² (Brüt)'].min()), int(df['m² (Brüt)'].max())
-m2_range = st.sidebar.slider("Brüt m²", min_m2, max_m2, (60, 200), key="m2_sec")
+m2_range = st.sidebar.slider("Brüt m²", min_m2, max_m2, (40, 350), key="m2_sec")
 
+# Geniş bütçe varsayılanı
 max_price = int(df['Fiyat'].max())
 budget = st.sidebar.number_input(
     "Maksimum Bütçe (TL)",
     min_value=500_000,
     max_value=max_price,
-    value=min(15_000_000, max_price),
+    value=min(40_000_000, max_price),
     step=500_000,
     key="butce_sec"
 )
@@ -194,15 +196,15 @@ with tab1:
     else:
         show_cols = ['İlan Başlığı', 'İlçe', 'Mahalle', 'Oda Düzeni', 'm² (Brüt)', 'Fiyat']
         st.dataframe(
-            filtered[show_cols].head(40).style.format({'Fiyat': '{:,.0f} TL', 'm² (Brüt)': '{:.0f}'}),
+            filtered[show_cols].head(50).style.format({'Fiyat': '{:,.0f} TL', 'm² (Brüt)': '{:.0f}'}),
             use_container_width=True,
-            height=280
+            height=300
         )
 
 # -------------------- TAB 2: EVİMİ NE KADARA SATARIM? --------------------
 with tab2:
     st.subheader("Evimi Ne Kadara Satarım?")
-    st.caption("Evinizin özelliklerini girin, 8.839 gerçek ilan verisine göre tahmini satış fiyatınızı öğrenin.")
+    st.caption("Evinizin özelliklerini girin, gerçek ilan verisine göre tahmini satış fiyatınızı öğrenin.")
 
     col1, col2, col3 = st.columns(3)
 
@@ -220,7 +222,6 @@ with tab2:
         st.info("Model m², oda, salon ve semt bilgisine göre fiyat tahmin eder.")
 
     if st.button("Satış Fiyatımı Hesapla", type="primary", use_container_width=True):
-        # Aynı ilçeden en sık semt değerini al
         benzer = df[df['İlçe'] == s_ilce]['Semt'].mode()
         semt_degeri = benzer.iloc[0] if len(benzer) > 0 else s_ilce
 
