@@ -65,55 +65,43 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("XAI Gayrimenkul Değerleme Platformu")
-st.caption("CatBoost + 8.839 temiz ilan verisi ile piyasa değerleme")
+st.caption("CatBoost + Koordinatlı ilan verisi ile piyasa değerleme")
 
 # =========================================================
-# 2. VERİ VE MODEL + ÖZELLİK ÇIKARIMA
+# 2. VERİ VE MODEL
 # =========================================================
-EXCEL_FILE = "ilanlar_temiz_hazir_sonn.xlsx"
+EXCEL_FILE = "ilanlar_koordinatli.xlsx"
 
 def basliktan_ozellik_cikar(baslik):
-    """İlan başlığından özellik etiketleri çıkarır"""
     if pd.isna(baslik):
         return []
     t = str(baslik).upper()
     ozellikler = []
-
     if any(k in t for k in ['METRO', 'METROBUS', 'METROBÜS']):
-        ozellikler.append("Metroya yakın")
-    if any(k in t for k in ['ULAŞIM', 'ULASIM', 'OTOBÜS', 'OTOBUS', 'DOLMUŞ', 'DOLMUS']):
+        ozellikler.append("Metro (başlıkta geçiyor)")
+    if any(k in t for k in ['ULAŞIM', 'ULASIM', 'OTOBÜS', 'OTOBUS']):
         ozellikler.append("Ulaşıma yakın")
-    if any(k in t for k in ['MARKET', 'ÇARŞI', 'CARSI', 'AVM', 'MIGROS', 'A101', 'BİM', 'BIM']):
-        ozellikler.append("Markete / Çarşıya yakın")
-    if any(k in t for k in ['OKUL', 'ÜNİVERSİTE', 'UNIVERSITE', 'İLKOKUL', 'LİSE']):
-        ozellikler.append("Okula yakın")
-    if any(k in t for k in ['HASTANE', 'SAĞLIK', 'SAGLIK']):
-        ozellikler.append("Hastaneye yakın")
-    if any(k in t for k in ['SİTE', 'SITE İÇİ', 'SITE ICI', 'SİTE İÇİNDE']):
+    if any(k in t for k in ['MARKET', 'ÇARŞI', 'CARSI', 'AVM']):
+        ozellikler.append("Markete yakın")
+    if any(k in t for k in ['SİTE', 'SITE']):
         ozellikler.append("Site içinde")
-    if any(k in t for k in ['OTOPARK', 'GARAJ', 'KAPALI OTOPARK']):
+    if any(k in t for k in ['OTOPARK', 'GARAJ']):
         ozellikler.append("Otopark")
-    if any(k in t for k in ['HAVUZ', 'YÜZME HAVUZU']):
+    if any(k in t for k in ['HAVUZ']):
         ozellikler.append("Havuz")
-    if any(k in t for k in ['GÜVENLİK', 'GUVENLIK', 'GÜVENLİKLİ']):
-        ozellikler.append("Güvenlik")
-    if any(k in t for k in ['SIFIR', 'SIFIR ', 'YENİ BİNA', 'YENI BINA', 'PROJEDEN']):
+    if any(k in t for k in ['SIFIR', 'YENİ BİNA', 'YENI BINA', 'PROJEDEN']):
         ozellikler.append("Sıfır / Yeni")
-    if any(k in t for k in ['DENİZ', 'DENIZ', 'BOĞAZ', 'BOGAZ', 'MANZARA']):
+    if any(k in t for k in ['MANZARA', 'DENİZ', 'BOĞAZ']):
         ozellikler.append("Manzara")
     if any(k in t for k in ['BALKON', 'TERAS']):
         ozellikler.append("Balkon / Teras")
     if any(k in t for k in ['ASANSÖR', 'ASANSOR']):
         ozellikler.append("Asansör")
-    if any(k in t for k in ['EBEVEYN BANYO', 'EBEVEYN BANYOSU']):
-        ozellikler.append("Ebeveyn Banyosu")
-
     return ozellikler
 
 @st.cache_resource(show_spinner="Model ve veriler yükleniyor...")
 def load_model_and_data():
     df = pd.read_excel(EXCEL_FILE)
-
     df = df.dropna(subset=['Fiyat', 'm² (Brüt)'])
     df['oda_sayisi'] = pd.to_numeric(df['oda_sayisi'], errors='coerce').fillna(2).astype(int)
     df['salon_sayisi'] = pd.to_numeric(df['salon_sayisi'], errors='coerce').fillna(1).astype(int)
@@ -121,18 +109,16 @@ def load_model_and_data():
     df['İlçe'] = df['İlçe'].fillna('Bilinmiyor').astype(str)
     df['Mahalle'] = df['Mahalle'].fillna('Bilinmiyor').astype(str)
     df['Semt'] = df['Semt / Mahalle'].astype(str)
-
-    # Başlıktan özellik çıkar
+    df['metro_mesafe_m'] = pd.to_numeric(df.get('metro_mesafe_m', 9999), errors='coerce').fillna(9999).astype(int)
+    df['metro_yakin'] = df.get('metro_yakin', 'Uzak').fillna('Uzak')
     df['Ozellikler'] = df['İlan Başlığı'].apply(basliktan_ozellik_cikar)
 
     feature_cols = ['m² (Brüt)', 'oda_sayisi', 'salon_sayisi', 'Semt']
-
     X = df[feature_cols].copy()
     y_log = np.log1p(df['Fiyat'])
     X['Semt'] = X['Semt'].astype(str)
 
     X_train, X_test, y_train, y_test = train_test_split(X, y_log, test_size=0.2, random_state=42)
-
     model = CatBoostRegressor(
         iterations=600, learning_rate=0.05, depth=6,
         cat_features=['Semt'], verbose=0, random_seed=42
@@ -141,11 +127,9 @@ def load_model_and_data():
 
     y_pred = np.expm1(model.predict(X_test))
     y_true = np.expm1(y_test)
-
     r2 = r2_score(y_true, y_pred)
     mae = mean_absolute_error(y_true, y_pred)
     rmse = np.sqrt(mean_squared_error(y_true, y_pred))
-
     return model, df, r2, mae, rmse
 
 try:
@@ -155,7 +139,7 @@ except Exception as e:
     st.stop()
 
 # =========================================================
-# 3. SIDEBAR FİLTRELER
+# 3. SIDEBAR
 # =========================================================
 st.sidebar.header("Filtreler")
 
@@ -166,8 +150,7 @@ if selected_ilce == "Tüm İlçeler":
     mahalle_options = sorted(df['Mahalle'].unique().tolist())
 else:
     mahalle_options = sorted(df[df['İlçe'] == selected_ilce]['Mahalle'].unique().tolist())
-mahalle_list = ["Tüm Mahalleler"] + mahalle_options
-selected_mahalle = st.sidebar.selectbox("Mahalle", mahalle_list, key="mahalle_sec")
+selected_mahalle = st.sidebar.selectbox("Mahalle", ["Tüm Mahalleler"] + mahalle_options, key="mahalle_sec")
 
 oda_list = ["Tümü"] + sorted(df['Oda Düzeni'].unique().tolist())
 selected_oda = st.sidebar.selectbox("Oda Düzeni", oda_list, key="oda_sec")
@@ -176,16 +159,18 @@ min_m2, max_m2 = int(df['m² (Brüt)'].min()), int(df['m² (Brüt)'].max())
 m2_range = st.sidebar.slider("Brüt m²", min_m2, max_m2, (40, 350), key="m2_sec")
 
 max_price = int(df['Fiyat'].max())
-budget = st.sidebar.number_input(
-    "Maksimum Bütçe (TL)", 500_000, max_price, min(40_000_000, max_price), 500_000, key="butce_sec"
+budget = st.sidebar.number_input("Maksimum Bütçe (TL)", 500_000, max_price, min(40_000_000, max_price), 500_000, key="butce_sec")
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("Metro Yakınlığı")
+metro_filtre = st.sidebar.selectbox(
+    "Metro mesafesi",
+    ["Tümü", "1 km'den yakın", "1-2 km", "2 km'den uzak"],
+    key="metro_filtre"
 )
 
-# Özellik filtreleri
 st.sidebar.markdown("---")
 st.sidebar.subheader("Özellik Filtreleri")
-f_metro = st.sidebar.checkbox("Metroya yakın", key="f_metro")
-f_ulasim = st.sidebar.checkbox("Ulaşıma yakın", key="f_ulasim")
-f_market = st.sidebar.checkbox("Markete yakın", key="f_market")
 f_site = st.sidebar.checkbox("Site içinde", key="f_site")
 f_otopark = st.sidebar.checkbox("Otopark", key="f_otopark")
 f_sifir = st.sidebar.checkbox("Sıfır / Yeni", key="f_sifir")
@@ -205,15 +190,16 @@ filtered = filtered[
     (filtered['Fiyat'] <= budget)
 ]
 
+if metro_filtre == "1 km'den yakın":
+    filtered = filtered[filtered['metro_mesafe_m'] <= 1000]
+elif metro_filtre == "1-2 km":
+    filtered = filtered[(filtered['metro_mesafe_m'] > 1000) & (filtered['metro_mesafe_m'] <= 2000)]
+elif metro_filtre == "2 km'den uzak":
+    filtered = filtered[filtered['metro_mesafe_m'] > 2000]
+
 def has_ozellik(ozellik_listesi, aranan):
     return any(aranan.lower() in o.lower() for o in ozellik_listesi)
 
-if f_metro:
-    filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Metroya"))]
-if f_ulasim:
-    filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Ulaşıma"))]
-if f_market:
-    filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Market"))]
 if f_site:
     filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Site"))]
 if f_otopark:
@@ -233,97 +219,60 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 ])
 
 # -------------------- TAB 1 --------------------
-# -------------------- TAB 1 --------------------
 with tab1:
     st.subheader("Akıllı Arama")
-    arama = st.text_input(
-        "Ne arıyorsunuz?",
-        placeholder="metroya yakın, 3+1, site içi, Ataşehir...",
-        key="arama"
-    )
-
-    def akilli_arama(dataframe, metin):
-        if not metin or not metin.strip():
-            return dataframe
-
-        metin = metin.lower().strip()
-        sonuc = dataframe.copy()
-
-        # Eş anlamlı / genişletilmiş kelimeler
-        genisletmeler = {
-            "metro": ["metro", "metrobüs", "metrobus"],
-            "metroya": ["metro", "metrobüs", "metrobus"],
-            "metroya yakın": ["metro", "metrobüs", "metrobus"],
-            "ulaşım": ["ulaşım", "ulasim", "otobüs", "otobus", "dolmuş"],
-            "ulaşıma": ["ulaşım", "ulasim", "otobüs", "otobus"],
-            "market": ["market", "çarşı", "carsi", "avm", "migros", "a101", "bim", "bım"],
-            "markete": ["market", "çarşı", "carsi", "avm", "migros", "a101", "bim"],
-            "site": ["site", "site içi", "site icinde", "site içinde"],
-            "site içi": ["site", "site içi", "site içinde"],
-            "otopark": ["otopark", "garaj", "kapalı otopark"],
-            "havuz": ["havuz", "yüzme havuzu"],
-            "sıfır": ["sıfır", "sifir", "yeni bina", "projeden"],
-            "sifir": ["sıfır", "sifir", "yeni bina", "projeden"],
-            "manzara": ["manzara", "deniz", "boğaz", "bogaz"],
-            "asansör": ["asansör", "asansor"],
-            "asansor": ["asansör", "asansor"],
-        }
-
-        # Arama terimlerini belirle
-        arama_terimleri = [metin]
-        for anahtar, degerler in genisletmeler.items():
-            if anahtar in metin:
-                arama_terimleri.extend(degerler)
-
-        arama_terimleri = list(set(arama_terimleri))  # tekrarsız
-
-        # Başlık + İlçe + Mahalle + Oda + Özelliklerde ara
-        def eslesiyor(row):
-            baslik = str(row['İlan Başlığı']).lower()
-            ilce = str(row['İlçe']).lower()
-            mahalle = str(row['Mahalle']).lower()
-            oda = str(row['Oda Düzeni']).lower()
-            ozellik_text = " ".join(row['Ozellikler']).lower() if isinstance(row['Ozellikler'], list) else ""
-
-            birlesik = f"{baslik} {ilce} {mahalle} {oda} {ozellik_text}"
-
-            return any(terim in birlesik for terim in arama_terimleri)
-
-        mask = sonuc.apply(eslesiyor, axis=1)
-        return sonuc[mask]
+    arama = st.text_input("Ne arıyorsunuz?", placeholder="3+1, Ataşehir, metro...", key="arama")
 
     if arama:
-        filtered = akilli_arama(filtered, arama)
+        metin = arama.lower().strip()
+        mask = (
+            filtered['İlan Başlığı'].str.lower().str.contains(metin, na=False) |
+            filtered['İlçe'].str.lower().str.contains(metin, na=False) |
+            filtered['Mahalle'].str.lower().str.contains(metin, na=False) |
+            filtered['Oda Düzeni'].str.contains(metin, na=False)
+        )
+        if "metro" in metin:
+            mask = mask | (filtered['metro_mesafe_m'] <= 1500)
+        filtered = filtered[mask]
         st.success(f"**{len(filtered)}** ilan bulundu")
 
     st.subheader(f"Filtrelenen İlanlar ({len(filtered)} adet)")
-    st.caption(f"Toplam temiz veri: **{len(df)}** ilan")
+    st.caption(f"Toplam veri: **{len(df)}** ilan | Metro mesafeleri yaklaşık (semt merkezi bazlı)")
 
     if len(filtered) == 0:
         st.warning("Kriterlere uygun ilan yok.")
     else:
-        show_cols = ['İlan Başlığı', 'İlçe', 'Mahalle', 'Oda Düzeni', 'm² (Brüt)', 'Fiyat']
+        show_df = filtered.head(40).copy()
+        show_df['Metro'] = show_df['metro_mesafe_m'].apply(lambda x: f"~{x} m")
+        show_cols = ['İlan Başlığı', 'İlçe', 'Mahalle', 'Oda Düzeni', 'm² (Brüt)', 'Metro', 'Fiyat']
         st.dataframe(
-            filtered[show_cols].head(40).style.format({'Fiyat': '{:,.0f} TL', 'm² (Brüt)': '{:.0f}'}),
-            use_container_width=True,
-            height=280
+            show_df[show_cols].style.format({'Fiyat': '{:,.0f} TL', 'm² (Brüt)': '{:.0f}'}),
+            use_container_width=True, height=300
         )
 
         st.divider()
-        st.subheader("İlan Özelliklerini Gör")
-        secilen = st.selectbox("İlan seçin", filtered['İlan Başlığı'].head(40).tolist(), key="ilan_ozellik_sec")
+        st.subheader("İlan Detayı & Özellikler")
+        secilen = st.selectbox("İlan seçin", filtered['İlan Başlığı'].head(40).tolist(), key="ilan_sec")
         if secilen:
             row = filtered[filtered['İlan Başlığı'] == secilen].iloc[0]
             st.markdown(f"**{row['İlan Başlığı']}**")
             st.caption(f"{row['İlçe']} / {row['Mahalle']}  |  {row['Oda Düzeni']}  |  {row['m² (Brüt)']} m²  |  {row['Fiyat']:,.0f} TL")
 
+            # Metro mesafesi
+            mesafe = int(row['metro_mesafe_m'])
+            if mesafe <= 1000:
+                st.success(f"🚇 Metroya yaklaşık **{mesafe} m** (yakın)")
+            elif mesafe <= 2000:
+                st.info(f"🚇 Metroya yaklaşık **{mesafe} m** (orta)")
+            else:
+                st.warning(f"🚇 Metroya yaklaşık **{mesafe} m** (uzak)")
+            st.caption("Not: Mesafe semt/mahalle merkezi bazlı yaklaşık değerdir, kapı önü mesafesi değildir.")
+
             ozellikler = row['Ozellikler']
             if ozellikler:
                 etiket_html = " ".join([f'<span class="ozellik-etiket">{o}</span>' for o in ozellikler])
-                st.markdown("**Özellikler:**", unsafe_allow_html=True)
+                st.markdown("**Başlıkta geçen özellikler:**", unsafe_allow_html=True)
                 st.markdown(etiket_html, unsafe_allow_html=True)
-            else:
-                st.info("Bu ilan başlığında öne çıkan özellik etiketi bulunamadı.")
 
 # -------------------- TAB 2 --------------------
 with tab2:
@@ -331,18 +280,14 @@ with tab2:
     st.caption("Evinizin özelliklerini girin, gerçek ilan verisine göre tahmini satış fiyatınızı öğrenin.")
 
     col1, col2, col3 = st.columns(3)
-
     with col1:
         s_ilce = st.selectbox("İlçe", sorted(df['İlçe'].unique().tolist()), key="s_ilce")
         s_brut = st.number_input("Brüt m²", 30, 800, 120, key="s_brut")
-
     with col2:
         s_oda = st.selectbox("Oda Sayısı", [1, 2, 3, 4, 5, 6, 7, 8], index=2, key="s_oda")
         s_salon = st.selectbox("Salon Sayısı", [0, 1, 2], index=1, key="s_salon")
-
     with col3:
-        st.write("**Özellikler (isteğe bağlı)**")
-        s_metro = st.checkbox("Metroya yakın", key="s_metro")
+        st.write("**Özellikler**")
         s_site = st.checkbox("Site içinde", key="s_site")
         s_otopark = st.checkbox("Otopark", key="s_otopark")
         s_sifir = st.checkbox("Sıfır / Yeni", key="s_sifir")
@@ -351,56 +296,39 @@ with tab2:
         benzer = df[df['İlçe'] == s_ilce]['Semt'].mode()
         semt_degeri = benzer.iloc[0] if len(benzer) > 0 else s_ilce
 
+        # Aynı ilçenin ortalama metro mesafesi
+        ilce_metro = df[df['İlçe'] == s_ilce]['metro_mesafe_m'].median()
+        if pd.isna(ilce_metro):
+            ilce_metro = 2000
+
         input_data = pd.DataFrame([{
             'm² (Brüt)': s_brut,
             'oda_sayisi': float(s_oda),
             'salon_sayisi': float(s_salon),
             'Semt': semt_degeri
         }])
-
         pred = float(np.expm1(model.predict(input_data)[0]))
-
-        # Özelliklere göre küçük düzeltme
-        if s_metro: pred *= 1.04
         if s_site: pred *= 1.03
         if s_otopark: pred *= 1.02
         if s_sifir: pred *= 1.05
+        if ilce_metro <= 1000: pred *= 1.03
 
-        hizli_satis = pred * 0.93
-        max_satis = pred * 1.08
+        hizli = pred * 0.93
+        maksimum = pred * 1.08
 
         st.success("Hesaplama tamamlandı")
-        st.markdown("---")
-
         m1, m2, m3 = st.columns(3)
         m1.metric("Tahmini Piyasa Değeri", f"{pred:,.0f} TL")
-        m2.metric("Hızlı Satış Fiyatı", f"{hizli_satis:,.0f} TL", delta="-7%")
-        m3.metric("Maksimum Satış Fiyatı", f"{max_satis:,.0f} TL", delta="+8%")
+        m2.metric("Hızlı Satış Fiyatı", f"{hizli:,.0f} TL", delta="-7%")
+        m3.metric("Maksimum Satış Fiyatı", f"{maksimum:,.0f} TL", delta="+8%")
 
-        # Seçilen özellikler
-        secilen_ozellikler = []
-        if s_metro: secilen_ozellikler.append("Metroya yakın")
-        if s_site: secilen_ozellikler.append("Site içinde")
-        if s_otopark: secilen_ozellikler.append("Otopark")
-        if s_sifir: secilen_ozellikler.append("Sıfır / Yeni")
+        st.info(f"Bu ilçede ortalama metro mesafesi yaklaşık **{int(ilce_metro)} m** (semt merkezi bazlı).")
+        st.caption(f"Öneri: İlanınızı {pred:,.0f} – {maksimum:,.0f} TL aralığında vermenizi öneririm.")
 
-        if secilen_ozellikler:
-            etiket_html = " ".join([f'<span class="ozellik-etiket">{o}</span>' for o in secilen_ozellikler])
-            st.markdown("**Girdiğiniz özellikler:**", unsafe_allow_html=True)
-            st.markdown(etiket_html, unsafe_allow_html=True)
-
-        st.info(f"""
-        **Öneri:**  
-        - İlanınızı **{pred:,.0f} – {max_satis:,.0f} TL** aralığında vermenizi öneririm.  
-        - Hızlı satmak isterseniz **{hizli_satis:,.0f} TL** civarı daha uygun olur.
-        """)
-
-# -------------------- TAB 3: ODA + ISI HARİTASI --------------------
+# -------------------- TAB 3 --------------------
 with tab3:
     st.subheader("Oda Düzeni Dağılımı & Fiyat Isı Haritası")
-
     col_a, col_b = st.columns(2)
-
     with col_a:
         st.markdown("#### Oda Düzeni Dağılımı")
         oda_counts = df['Oda Düzeni'].value_counts().head(12).reset_index()
@@ -408,9 +336,8 @@ with tab3:
         fig_oda = px.bar(oda_counts, x='Oda Düzeni', y='İlan Sayısı', color='İlan Sayısı',
                          color_continuous_scale='Blues', text='İlan Sayısı')
         fig_oda.update_traces(textposition='outside')
-        fig_oda.update_layout(template="plotly_dark", height=380, showlegend=False, margin=dict(t=20, b=40))
+        fig_oda.update_layout(template="plotly_dark", height=380, showlegend=False)
         st.plotly_chart(fig_oda, use_container_width=True)
-
     with col_b:
         st.markdown("#### Oda Düzenine Göre Ortalama Fiyat")
         oda_price = df.groupby('Oda Düzeni')['Fiyat'].mean().sort_values(ascending=False).head(12).reset_index()
@@ -418,39 +345,34 @@ with tab3:
         fig_price = px.bar(oda_price, x='Oda Düzeni', y='Ortalama Fiyat', color='Ortalama Fiyat',
                            color_continuous_scale='Reds', text='Ortalama Fiyat')
         fig_price.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
-        fig_price.update_layout(template="plotly_dark", height=380, showlegend=False, margin=dict(t=20, b=40))
+        fig_price.update_layout(template="plotly_dark", height=380, showlegend=False)
         st.plotly_chart(fig_price, use_container_width=True)
 
     st.divider()
     st.markdown("#### İlçe × Oda Düzeni Ortalama Fiyat Isı Haritası")
-
     top_ilceler = df['İlçe'].value_counts().head(15).index.tolist()
     top_odalar = df['Oda Düzeni'].value_counts().head(8).index.tolist()
     heat_df = df[df['İlçe'].isin(top_ilceler) & df['Oda Düzeni'].isin(top_odalar)]
     pivot = heat_df.pivot_table(values='Fiyat', index='İlçe', columns='Oda Düzeni', aggfunc='mean')
     pivot = pivot.reindex(top_ilceler)
     pivot = pivot[[c for c in top_odalar if c in pivot.columns]]
-
-    fig_heat = px.imshow(pivot, color_continuous_scale='YlOrRd', aspect='auto',
-                         labels=dict(color="Ort. Fiyat (TL)"))
-    fig_heat.update_layout(template="plotly_dark", height=520, margin=dict(l=10, r=10, t=30, b=10))
-    fig_heat.update_traces(hovertemplate="İlçe: %{y}<br>Oda: %{x}<br>Ort. Fiyat: %{z:,.0f} TL<extra></extra>")
+    fig_heat = px.imshow(pivot, color_continuous_scale='YlOrRd', aspect='auto', labels=dict(color="Ort. Fiyat"))
+    fig_heat.update_layout(template="plotly_dark", height=520)
     st.plotly_chart(fig_heat, use_container_width=True)
 
 # -------------------- TAB 4 --------------------
 with tab4:
     st.subheader("Model Açıklanabilirliği")
-    st.caption(f"R²: **%{model_r2*100:.2f}**  |  MAE: {model_mae:,.0f} TL  |  Veri: {len(df):,} ilan")
+    st.caption(f"R²: **%{model_r2*100:.2f}** | MAE: {model_mae:,.0f} TL | Veri: {len(df):,} ilan")
     try:
         importance = model.get_feature_importance()
         names = ['m² (Brüt)', 'Oda Sayısı', 'Salon Sayısı', 'Semt / İlçe']
         f_df = pd.DataFrame({'Öznitelik': names[:len(importance)], 'Önem': importance}).sort_values('Önem')
-        fig = px.bar(f_df, x='Önem', y='Öznitelik', orientation='h',
-                     title="Fiyatı En Çok Etkileyen Faktörler", color='Önem', color_continuous_scale='Blues')
+        fig = px.bar(f_df, x='Önem', y='Öznitelik', orientation='h', color='Önem', color_continuous_scale='Blues')
         fig.update_layout(template="plotly_dark", height=380)
         st.plotly_chart(fig, use_container_width=True)
     except:
-        st.info("Öznitelik önem grafiği hesaplanamadı.")
+        st.info("Grafik hesaplanamadı.")
 
 # -------------------- TAB 5 --------------------
 with tab5:
