@@ -267,10 +267,35 @@ if menu_secim == "İlan Arama ve Filtreleme":
             st.markdown("##### Lokasyon Parametreleri")
             il_options = ["Tüm İller"] + sorted(list(set(TURKIYE_ILLERI + df['İl'].unique().tolist())))
             selected_il = st.selectbox("İl", il_options, index=0, key="f_il")
-            ilce_options = sorted(df['İlçe'].unique().tolist()) if selected_il == "Tüm İller" else sorted(df[df['İl'] == selected_il]['İlçe'].unique().tolist())
-            selected_ilce = st.selectbox("İlçe", ["Tüm İlçeler"] + ilce_options, key="f_ilce")
-            mahalle_options = sorted(df['Mahalle'].unique().tolist()) if selected_ilce == "Tüm İlçeler" else sorted(df[df['İlçe'] == selected_ilce]['Mahalle'].unique().tolist())
-            selected_mahalle = st.selectbox("Mahalle", ["Tüm Mahalleler"] + mahalle_options, key="f_mahalle")
+            
+            # DİNAMİK İLÇE HİYERARŞİSİ FIX
+            if selected_il == "Tüm İller":
+                ilce_options = sorted(df['İlçe'].unique().tolist())
+            else:
+                ilce_options = sorted(df[df['İl'] == selected_il]['İlçe'].unique().tolist())
+            
+            if len(ilce_options) == 0:
+                ilce_list = ["Seçilen İlde Kayıtlı İlçe Yok"]
+            else:
+                ilce_list = ["Tüm İlçeler"] + ilce_options
+                
+            selected_ilce = st.selectbox("İlçe", ilce_list, key="f_ilce")
+            
+            # DİNAMİK MAHALLE HİYERARŞİSİ FIX
+            if selected_ilce in ["Tüm İlçeler", "Seçilen İlde Kayıtlı İlçe Yok"]:
+                if selected_il == "Tüm İller":
+                    mahalle_options = sorted(df['Mahalle'].unique().tolist())
+                else:
+                    mahalle_options = sorted(df[df['İl'] == selected_il]['Mahalle'].unique().tolist())
+            else:
+                mahalle_options = sorted(df[(df['İlçe'] == selected_ilce) & (df['İl'] == selected_il if selected_il != "Tüm İller" else True)]['Mahalle'].unique().tolist())
+            
+            if len(mahalle_options) == 0:
+                mahalle_list = ["Kayıtlı Mahalle Yok"]
+            else:
+                mahalle_list = ["Tüm Mahalleler"] + mahalle_options
+
+            selected_mahalle = st.selectbox("Mahalle", mahalle_list, key="f_mahalle")
 
         with f_col2:
             st.markdown("##### Yapı Özellikleri")
@@ -303,8 +328,8 @@ if menu_secim == "İlan Arama ve Filtreleme":
 
     filtered = df.copy()
     if selected_il != "Tüm İller": filtered = filtered[filtered['İl'] == selected_il]
-    if selected_ilce != "Tüm İlçeler": filtered = filtered[filtered['İlçe'] == selected_ilce]
-    if selected_mahalle != "Tüm Mahalleler": filtered = filtered[filtered['Mahalle'] == selected_mahalle]
+    if selected_ilce not in ["Tüm İlçeler", "Seçilen İlde Kayıtlı İlçe Yok"]: filtered = filtered[filtered['İlçe'] == selected_ilce]
+    if selected_mahalle not in ["Tüm Mahalleler", "Kayıtlı Mahalle Yok"]: filtered = filtered[filtered['Mahalle'] == selected_mahalle]
     if selected_oda != "Tümü": filtered = filtered[filtered['Oda Düzeni'] == selected_oda]
 
     filtered = filtered[(filtered['m² (Brüt)'] >= m2_range[0]) & (filtered['m² (Brüt)'] <= m2_range[1]) & (filtered['Fiyat'] <= budget)]
@@ -334,7 +359,7 @@ if menu_secim == "İlan Arama ve Filtreleme":
 
     st.markdown(f"### Sorgulama Sonuçları ({len(filtered)} İlan Listelendi)")
     if len(filtered) == 0:
-        st.warning("Belirtilen parametrelere uygun kayıt bulunamadı.")
+        st.warning("Belirtilen il, ilçe veya arama kriterlerine uygun kayıt bulunamadı.")
     else:
         show_df = filtered.head(40).copy()
         show_df['m² Birim Fiyatı'] = show_df['fiyat_m2'].apply(lambda x: f"{x:,.0f} TL")
@@ -346,7 +371,6 @@ if menu_secim == "İlan Arama ve Filtreleme":
             on_select="rerun", selection_mode="single-row", key="df_selection"
         )
 
-        # DÜZELTME: CSV İNDİRME İŞLEMİ İÇİN SÜTUNLAR KONTROL EDİLEREK HAZIRLANIR
         export_df = filtered.copy()
         export_df['m² Birim Fiyatı'] = export_df['fiyat_m2'].apply(lambda x: f"{x:,.0f} TL")
         export_cols = ['İlan Başlığı', 'İl', 'İlçe', 'Mahalle', 'Oda Düzeni', 'm² (Brüt)', 'm² Birim Fiyatı', 'Fiyat']
@@ -404,14 +428,17 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
     st.markdown("""
     <div class="content-card">
         <h4>Taşınmaz Parametre Girişi</h4>
-        Değerlemesi yapılacak taşınmazın fiziksel ve konum bilgilerini giriniz. Bu modül arama filtrelerinden bağımsızdır.
+        Değerlemesi yapılacak taşınmazın fiziksel ve konum bilgilerini giriniz. Yapay zeka değerlemesi sadece veritabanında kayıtlı bölgeler için aktif çalışır.
     </div>
     """, unsafe_allow_html=True)
 
     c_deg1, c_deg2, c_deg3 = st.columns(3)
     with c_deg1:
-        s_il = st.selectbox("İl", sorted(list(set(TURKIYE_ILLERI + df['İl'].unique().tolist()))), index=0, key="val_il")
-        s_ilce_options = sorted(df[df['İl'] == s_il]['İlçe'].unique().tolist()) if s_il in df['İl'].values else sorted(df['İlçe'].unique().tolist())
+        # DEĞERLEME MODÜLÜNDE SADECE VERİSİ OLAN İLLERİ LİSTELEME
+        available_iller = sorted(df['İl'].unique().tolist())
+        s_il = st.selectbox("İl", available_iller, index=0, key="val_il")
+        
+        s_ilce_options = sorted(df[df['İl'] == s_il]['İlçe'].unique().tolist())
         s_ilce = st.selectbox("İlçe", s_ilce_options, key="val_ilce")
     with c_deg2:
         s_brut = st.number_input("Brüt Kullanım Alanı (m²)", 30, 800, 120, key="val_brut")
@@ -527,19 +554,24 @@ Bu rapor otomatik algoritma tarafından üretilmiştir. Resmi ekspertiz raporu y
         )
 
 # =========================================================
-# MODÜL 3: COĞRAFİ HARİTA ANALİZİ (ADIM 3: ÖZELLEŞTİRİLDİ)
+# MODÜL 3: COĞRAFİ HARİTA ANALİZİ
 # =========================================================
 elif menu_secim == "Coğrafi Harita Analizi":
     st.title("Coğrafi İlan Dağılım Haritası ve Lokasyon Keşfi")
     st.caption("Seçilen bölgedeki taşınmazların konumsal yoğunlukları, alanları ve metrekare birim fiyat dağılımları.")
 
-    # LOKASYON BAZLI HARİTA FİLTRESİ
     h_col1, h_col2 = st.columns(2)
     with h_col1:
-        map_il = st.selectbox("Harita İl Seçimi:", ["Tüm İller"] + sorted(list(set(TURKIYE_ILLERI + df['İl'].unique().tolist()))), index=0, key="map_il")
+        map_il_options = ["Tüm İller"] + sorted(df['İl'].unique().tolist())
+        map_il = st.selectbox("Harita İl Seçimi:", map_il_options, index=0, key="map_il")
     with h_col2:
-        map_ilce_options = sorted(df['İlçe'].unique().tolist()) if map_il == "Tüm İller" else sorted(df[df['İl'] == map_il]['İlçe'].unique().tolist())
-        map_ilce = st.selectbox("Harita İlçe Seçimi:", ["Tüm İlçeler"] + map_ilce_options, key="map_ilce")
+        if map_il == "Tüm İller":
+            map_ilce_options = sorted(df['İlçe'].unique().tolist())
+        else:
+            map_ilce_options = sorted(df[df['İl'] == map_il]['İlçe'].unique().tolist())
+            
+        map_ilce_list = ["Tüm İlçeler"] + map_ilce_options if len(map_ilce_options) > 0 else ["Kayıtlı İlçe Yok"]
+        map_ilce = st.selectbox("Harita İlçe Seçimi:", map_ilce_list, key="map_ilce")
 
     coords = {
         'Ataşehir': (40.9833, 29.1167), 'Kadıköy': (40.9903, 29.0275), 'Üsküdar': (41.0244, 29.0050),
@@ -549,7 +581,7 @@ elif menu_secim == "Coğrafi Harita Analizi":
 
     map_filtered = df.copy()
     if map_il != "Tüm İller": map_filtered = map_filtered[map_filtered['İl'] == map_il]
-    if map_ilce != "Tüm İlçeler": map_filtered = map_filtered[map_filtered['İlçe'] == map_ilce]
+    if map_ilce not in ["Tüm İlçeler", "Kayıtlı İlçe Yok"]: map_filtered = map_filtered[map_filtered['İlçe'] == map_ilce]
 
     if len(map_filtered) == 0:
         st.warning("Seçilen lokasyonda haritada gösterilecek ilan kaydı bulunamadı.")
