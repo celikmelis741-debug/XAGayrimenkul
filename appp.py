@@ -346,7 +346,13 @@ if menu_secim == "İlan Arama ve Filtreleme":
             on_select="rerun", selection_mode="single-row", key="df_selection"
         )
 
-        csv_data = filtered[show_cols].to_csv(index=False, encoding='utf-8-sig')
+        # DÜZELTME: CSV İNDİRME İŞLEMİ İÇİN SÜTUNLAR KONTROL EDİLEREK HAZIRLANIR
+        export_df = filtered.copy()
+        export_df['m² Birim Fiyatı'] = export_df['fiyat_m2'].apply(lambda x: f"{x:,.0f} TL")
+        export_cols = ['İlan Başlığı', 'İl', 'İlçe', 'Mahalle', 'Oda Düzeni', 'm² (Brüt)', 'm² Birim Fiyatı', 'Fiyat']
+        valid_export_cols = [c for c in export_cols if c in export_df.columns]
+        
+        csv_data = export_df[valid_export_cols].to_csv(index=False, encoding='utf-8-sig')
         st.download_button(
             label="Listelenen İlanları CSV Olarak İndir",
             data=csv_data,
@@ -389,7 +395,7 @@ if menu_secim == "İlan Arama ve Filtreleme":
                     st.write(f"**Konum:** {k_row['İlçe']} / {k_row['Mahalle']}")
 
 # =========================================================
-# MODÜL 2: GAYRİMENKUL DEĞERLEME MODÜLÜ (BAĞIMSIZLAŞTIRILDI)
+# MODÜL 2: GAYRİMENKUL DEĞERLEME MODÜLÜ
 # =========================================================
 elif menu_secim == "Gayrimenkul Değerleme Modülü":
     st.title("Otomatik Gayrimenkul Değerleme Paneli")
@@ -521,11 +527,19 @@ Bu rapor otomatik algoritma tarafından üretilmiştir. Resmi ekspertiz raporu y
         )
 
 # =========================================================
-# MODÜL 3: COĞRAFİ HARİTA ANALİZİ
+# MODÜL 3: COĞRAFİ HARİTA ANALİZİ (ADIM 3: ÖZELLEŞTİRİLDİ)
 # =========================================================
 elif menu_secim == "Coğrafi Harita Analizi":
-    st.title("Coğrafi İlan Dağılım Haritası")
-    st.caption("Veri tabanındaki taşınmazların konumsal dağılımı, büyüklük ve fiyat yoğunlukları.")
+    st.title("Coğrafi İlan Dağılım Haritası ve Lokasyon Keşfi")
+    st.caption("Seçilen bölgedeki taşınmazların konumsal yoğunlukları, alanları ve metrekare birim fiyat dağılımları.")
+
+    # LOKASYON BAZLI HARİTA FİLTRESİ
+    h_col1, h_col2 = st.columns(2)
+    with h_col1:
+        map_il = st.selectbox("Harita İl Seçimi:", ["Tüm İller"] + sorted(list(set(TURKIYE_ILLERI + df['İl'].unique().tolist()))), index=0, key="map_il")
+    with h_col2:
+        map_ilce_options = sorted(df['İlçe'].unique().tolist()) if map_il == "Tüm İller" else sorted(df[df['İl'] == map_il]['İlçe'].unique().tolist())
+        map_ilce = st.selectbox("Harita İlçe Seçimi:", ["Tüm İlçeler"] + map_ilce_options, key="map_ilce")
 
     coords = {
         'Ataşehir': (40.9833, 29.1167), 'Kadıköy': (40.9903, 29.0275), 'Üsküdar': (41.0244, 29.0050),
@@ -533,34 +547,48 @@ elif menu_secim == "Coğrafi Harita Analizi":
         'Avcılar': (40.9801, 28.7175), 'Esenyurt': (41.0342, 28.6801), 'Pendik': (40.8750, 29.2333)
     }
 
-    map_df = df.copy()
-    def get_coords(row):
-        for name, (lat, lon) in coords.items():
-            if name.lower() in str(row['İlçe']).lower():
-                return pd.Series([lat, lon])
-        return pd.Series([41.0082, 28.9784])
+    map_filtered = df.copy()
+    if map_il != "Tüm İller": map_filtered = map_filtered[map_filtered['İl'] == map_il]
+    if map_ilce != "Tüm İlçeler": map_filtered = map_filtered[map_filtered['İlçe'] == map_ilce]
 
-    map_df[['lat', 'lon']] = map_df.apply(get_coords, axis=1)
-    np.random.seed(42)
-    map_df['lat'] += np.random.normal(0, 0.006, len(map_df))
-    map_df['lon'] += np.random.normal(0, 0.006, len(map_df))
+    if len(map_filtered) == 0:
+        st.warning("Seçilen lokasyonda haritada gösterilecek ilan kaydı bulunamadı.")
+    else:
+        def get_coords(row):
+            for name, (lat, lon) in coords.items():
+                if name.lower() in str(row['İlçe']).lower():
+                    return pd.Series([lat, lon])
+            return pd.Series([41.0082, 28.9784])
 
-    fig_map = px.scatter_mapbox(
-        map_df.head(500),
-        lat="lat", lon="lon",
-        color="Fiyat", size="m² (Brüt)",
-        hover_name="İlan Başlığı",
-        color_continuous_scale="Reds",
-        size_max=14, zoom=9.5,
-        center={"lat": 41.02, "lon": 28.95},
-        mapbox_style="carto-darkmatter",
-        height=580
-    )
-    fig_map.update_layout(margin=dict(l=0, r=0, t=0, b=0), template="plotly_dark")
-    st.plotly_chart(fig_map, use_container_width=True)
+        map_filtered[['lat', 'lon']] = map_filtered.apply(get_coords, axis=1)
+        np.random.seed(42)
+        map_filtered['lat'] += np.random.normal(0, 0.006, len(map_filtered))
+        map_filtered['lon'] += np.random.normal(0, 0.006, len(map_filtered))
+
+        fig_map = px.scatter_mapbox(
+            map_filtered.head(600),
+            lat="lat", lon="lon",
+            color="Fiyat", size="m² (Brüt)",
+            hover_name="İlan Başlığı",
+            hover_data={"İlçe": True, "Mahalle": True, "Fiyat": ":,.0f TL", "m² (Brüt)": True, "lat": False, "lon": False},
+            color_continuous_scale="Reds",
+            size_max=15, zoom=9.5,
+            center={"lat": 41.02, "lon": 28.95},
+            mapbox_style="carto-darkmatter",
+            height=600
+        )
+        fig_map.update_layout(margin=dict(l=0, r=0, t=0, b=0), template="plotly_dark")
+        st.plotly_chart(fig_map, use_container_width=True)
+
+        st.divider()
+        st.markdown("### Harita Üzerindeki Bölgenin İstatistiksel Özeti")
+        hm1, hm2, hm3 = st.columns(3)
+        hm1.metric("Bölgedeki İlan Sayısı", f"{len(map_filtered):,} Adet")
+        hm2.metric("Bölge Ortalama Satış Bedeli", f"{map_filtered['Fiyat'].mean():,.0f} TL")
+        hm3.metric("Bölge Ortalama m² Birim Fiyatı", f"{map_filtered['fiyat_m2'].mean():,.0f} TL")
 
 # =========================================================
-# MODÜL 4: KONUT KREDİSİ SİMÜLASYONU (BAĞIMSIZLAŞTIRILDI)
+# MODÜL 4: KONUT KREDİSİ SİMÜLASYONU
 # =========================================================
 elif menu_secim == "Konut Kredisi Simülasyonu":
     st.title("Konut Kredisi Hesaplama Modülü")
