@@ -83,7 +83,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# TÜRKİYE 81 İL LİSTESİ
 TURKIYE_ILLERI = [
     "Adana", "Adıyaman", "Afyonkarahisar", "Ağrı", "Aksaray", "Amasya", "Ankara", "Antalya", "Ardahan", "Artvin",
     "Aydın", "Balıkesir", "Bartın", "Batman", "Bayburt", "Bilecik", "Bingöl", "Bitlis", "Bolu", "Burdur",
@@ -254,7 +253,6 @@ if menu_secim == "İlan Arama ve Filtreleme":
     st.title("Piyasa İlanları ve Filtreleme Paneli")
     st.caption("Aktif veritabanındaki gayrimenkul ilanlarını kriterlerinize göre sorgulayabilirsiniz.")
 
-    # KPI Kartları
     kpi1, kpi2, kpi3, kpi4 = st.columns(4)
     kpi1.metric("Toplam Kayıtlı İlan", f"{len(df):,} Adet")
     kpi2.metric("Ortalama İlan Bedeli", f"{df['Fiyat'].mean():,.0f} TL")
@@ -303,7 +301,6 @@ if menu_secim == "İlan Arama ve Filtreleme":
             f_guvenlik = st.checkbox("Güvenlik Hizmeti", key="c_guvenlik")
             f_sifir = st.checkbox("Sıfır / Yeni Bina", key="c_sifir")
 
-    # Filtreleme İşlemi
     filtered = df.copy()
     if selected_il != "Tüm İller": filtered = filtered[filtered['İl'] == selected_il]
     if selected_ilce != "Tüm İlçeler": filtered = filtered[filtered['İlçe'] == selected_ilce]
@@ -349,6 +346,14 @@ if menu_secim == "İlan Arama ve Filtreleme":
             on_select="rerun", selection_mode="single-row", key="df_selection"
         )
 
+        csv_data = filtered[show_cols].to_csv(index=False, encoding='utf-8-sig')
+        st.download_button(
+            label="Listelenen İlanları CSV Olarak İndir",
+            data=csv_data,
+            file_name=f"Gayrimenkul_Ilan_Listesi_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv"
+        )
+
         selected_rows = event.get("selection", {}).get("rows", [])
         st.divider()
         
@@ -384,7 +389,7 @@ if menu_secim == "İlan Arama ve Filtreleme":
                     st.write(f"**Konum:** {k_row['İlçe']} / {k_row['Mahalle']}")
 
 # =========================================================
-# MODÜL 2: GAYRİMENKUL DEĞERLEME MODÜLÜ
+# MODÜL 2: GAYRİMENKUL DEĞERLEME MODÜLÜ (BAĞIMSIZLAŞTIRILDI)
 # =========================================================
 elif menu_secim == "Gayrimenkul Değerleme Modülü":
     st.title("Otomatik Gayrimenkul Değerleme Paneli")
@@ -393,28 +398,30 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
     st.markdown("""
     <div class="content-card">
         <h4>Taşınmaz Parametre Girişi</h4>
-        Değerlemesi yapılacak taşınmazın fiziksel ve konum bilgilerini giriniz.
+        Değerlemesi yapılacak taşınmazın fiziksel ve konum bilgilerini giriniz. Bu modül arama filtrelerinden bağımsızdır.
     </div>
     """, unsafe_allow_html=True)
 
-    col1, col2 = st.columns(2)
-    with col1:
+    c_deg1, c_deg2, c_deg3 = st.columns(3)
+    with c_deg1:
         s_il = st.selectbox("İl", sorted(list(set(TURKIYE_ILLERI + df['İl'].unique().tolist()))), index=0, key="val_il")
         s_ilce_options = sorted(df[df['İl'] == s_il]['İlçe'].unique().tolist()) if s_il in df['İl'].values else sorted(df['İlçe'].unique().tolist())
         s_ilce = st.selectbox("İlçe", s_ilce_options, key="val_ilce")
+    with c_deg2:
         s_brut = st.number_input("Brüt Kullanım Alanı (m²)", 30, 800, 120, key="val_brut")
-    with col2:
         s_oda = st.selectbox("Oda Sayısı", [1, 2, 3, 4, 5, 6, 7, 8], index=2, key="val_oda")
+    with c_deg3:
         s_salon = st.selectbox("Salon Sayısı", [0, 1, 2], index=1, key="val_salon")
 
     st.markdown("##### Ek Yapı Nitelikleri")
-    sc1, sc2 = st.columns(2)
+    sc1, sc2, sc3 = st.columns(3)
     with sc1:
         s_site = st.checkbox("Site İçerisinde", key="v_site")
         s_havuz = st.checkbox("Yüzme Havuzu Mevcut", key="v_havuz")
-        s_otopark = st.checkbox("Kapalı/Açık Otopark Mevcut", key="v_otopark")
     with sc2:
+        s_otopark = st.checkbox("Otopark Mevcut", key="v_otopark")
         s_ebeveyn = st.checkbox("Ebeveyn Banyosu Mevcut", key="v_ebeveyn")
+    with sc3:
         s_sifir = st.checkbox("Sıfır / Yeni Yapı", key="v_sifir")
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -482,6 +489,37 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
         </div>
         """, unsafe_allow_html=True)
 
+        rapor_metni = f"""GAYRİMENKUL DEĞERLEME VE YATIRIM RAPORU
+Tarih: {datetime.now().strftime('%d/%m/%Y %H:%M')}
+
+1. TAŞINMAZ BİLGİLERİ
+-----------------------------------------
+Lokasyon: {s_il} / {s_ilce}
+Brüt Alan: {s_brut} m²
+Oda Yapısı: {s_oda}+{s_salon}
+
+2. DEĞERLEME SONUÇLARI (CATBOOST REGRESSION)
+-----------------------------------------
+Tahmini Piyasa Satış Bedeli: {pred_mid:,.0f} TL
+Alt Bant (%10 Quantile / Hızlı Satış): {pred_low:,.0f} TL
+Üst Bant (%90 Quantile / Tavan Satış): {pred_high:,.0f} TL
+
+3. YATIRIM VE AMORTİSMAN ANALİZİ
+-----------------------------------------
+Tahmini Aylık Kira Potansiyeli: {tahmini_aylik_kira:,.0f} TL / Ay
+Amortisman Süresi: {amortisman_yil:.1f} Yıl
+Yıllık Brüt Getiri Oranı: %{yillik_getiri_yuzde:.2f}
+
+-----------------------------------------
+Bu rapor otomatik algoritma tarafından üretilmiştir. Resmi ekspertiz raporu yerine geçmez.
+"""
+        st.download_button(
+            label="Değerleme Raporunu Metin Dosyası Olarak İndir",
+            data=rapor_metni,
+            file_name=f"Gayrimenkul_Degerleme_Raporu_{s_ilce}_{datetime.now().strftime('%Y%m%d')}.txt",
+            mime="text/plain"
+        )
+
 # =========================================================
 # MODÜL 3: COĞRAFİ HARİTA ANALİZİ
 # =========================================================
@@ -522,7 +560,7 @@ elif menu_secim == "Coğrafi Harita Analizi":
     st.plotly_chart(fig_map, use_container_width=True)
 
 # =========================================================
-# MODÜL 4: KONUT KREDİSİ SİMÜLASYONU
+# MODÜL 4: KONUT KREDİSİ SİMÜLASYONU (BAĞIMSIZLAŞTIRILDI)
 # =========================================================
 elif menu_secim == "Konut Kredisi Simülasyonu":
     st.title("Konut Kredisi Hesaplama Modülü")
@@ -530,21 +568,35 @@ elif menu_secim == "Konut Kredisi Simülasyonu":
 
     st.markdown("""
     <div class="content-card">
-        <h4>Kredi Hesaplama Parametreleri</h4>
-        Finansman tutarı ve geri ödeme vadesini belirleyiniz.
+        <h4>Finansman ve Kredi Parametreleri</h4>
+        Alınacak konut bedeli, kullanılacak peşinat oranı ve tercih edilen aylık faiz oranını giriniz.
     </div>
     """, unsafe_allow_html=True)
+
+    banka_seçimi = st.selectbox(
+        "Banka Oran Referansı Seçiniz:",
+        ["Ziraat / Halkbank / Vakıfbank (Kamu) - %2.79", "Özel Banka Ortalaması - %2.89", "Özel Faiz Oranı Girişi"],
+        key="banka_secim"
+    )
 
     col1, col2 = st.columns(2)
     with col1:
         tutar = st.number_input("Konut Rayiç Bedeli (TL)", value=5_000_000.0, step=100000.0, key="kredi_page_tutar")
         pesinat = st.slider("Özkaynak / Peşinat Oranı (%)", 10, 90, 20, 5, key="kredi_page_pesinat")
-        vade = st.selectbox("Geri Ödeme Vadesi (Ay)", [60, 84, 120, 180, 240], index=2, key="kredi_page_vade")
     with col2:
-        faiz = st.number_input("Aylık Akdi Faiz Oranı (%)", 0.1, 10.0, 2.79, 0.01, key="kredi_page_faiz")
+        vade = st.selectbox("Geri Ödeme Vadesi (Ay)", [36, 48, 60, 84, 120, 180, 240], index=4, key="kredi_page_vade")
+        if banka_seçimi == "Özel Faiz Oranı Girişi":
+            faiz = st.number_input("Aylık Akdi Faiz Oranı (%)", 0.1, 10.0, 2.79, 0.01, key="kredi_page_faiz")
+        elif "Kamu" in banka_seçimi:
+            faiz = 2.79
+            st.info("Kamu bankası referans aylık faiz oranı: %2.79")
+        else:
+            faiz = 2.89
+            st.info("Özel banka referans aylık faiz oranı: %2.89")
 
     pesinat_tutar = tutar * (pesinat / 100)
     kredi = tutar - pesinat_tutar
+
     if kredi > 0:
         r = faiz / 100
         taksit = (kredi * r * (1 + r)**vade) / ((1 + r)**vade - 1)
@@ -552,19 +604,38 @@ elif menu_secim == "Konut Kredisi Simülasyonu":
         
         st.divider()
         m1, m2, m3 = st.columns(3)
-        m1.metric("Peşinat Tutarı", f"{pesinat_tutar:,.0f} TL")
+        m1.metric("Gerekli Peşinat Tutarı", f"{pesinat_tutar:,.0f} TL")
         m2.metric("Kredi Tutarı", f"{kredi:,.0f} TL")
         m3.metric("Aylık Taksit Bedeli", f"{taksit:,.2f} TL")
         
         st.markdown(f"""
         <div class="rapor-kart">
-            <h4>Geri Ödeme Planı Detayı</h4>
+            <h4>Geri Ödeme Planı Finansal Özeti</h4>
             <ul>
-                <li><strong>Toplam Geri Ödeme Bedeli:</strong> {toplam:,.2f} TL</li>
+                <li><strong>Ana Para Tutarı:</strong> {kredi:,.2f} TL</li>
                 <li><strong>Toplam Tahakkuk Eden Faiz:</strong> {toplam - kredi:,.2f} TL</li>
+                <li><strong>Toplam Geri Ödeme Bedeli:</strong> {toplam:,.2f} TL</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
+
+        st.divider()
+        st.markdown("### Örnek Yıllık Ödeme Özet Tablosu")
+        
+        yillik_ozet = []
+        kalan_anapara = kredi
+        for ay in range(1, vade + 1):
+            faiz_payi = kalan_anapara * r
+            anapara_payi = taksit - faiz_payi
+            kalan_anapara -= anapara_payi
+            if ay % 12 == 0 or ay == vade:
+                yillik_ozet.append({
+                    "Taksit (Ay)": f"{ay}. Ay",
+                    "Aylık Taksit": f"{taksit:,.2f} TL",
+                    "Kalan Anapara": f"{max(0, kalan_anapara):,.2f} TL"
+                })
+        
+        st.dataframe(pd.DataFrame(yillik_ozet), use_container_width=True, hide_index=True)
 
 # =========================================================
 # MODÜL 5: MODEL VE PİYASA ANALİTİĞİ
