@@ -104,17 +104,29 @@ def basliktan_ozellik_cikar(baslik):
         return []
     t = str(baslik).upper()
     oz = []
-    if any(k in t for k in ['METRO', 'METROBUS', 'METROBÜS', 'MARMARAY']):
+    
+    # 1. DEPREM VE BİNA GÜVENLİĞİ NİTELİKLERİ
+    if any(k in t for k in ['DEPREM YÖNETMELİĞİ', 'RADYE TEMEL', 'PERDE BETON', 'DEPREM ETÜDLÜ', 'C30', 'C35', 'ZEMİN ETÜDLÜ']):
+        oz.append("Deprem Yönetmeliğine Uygun")
+    if any(k in t for k in ['KENTSEL DÖNÜŞÜM', 'GÜÇLENDİRİLMİŞ', 'HASARSIZ']):
+        oz.append("Kentsel Dönüşüm / Güçlendirilmiş")
+        
+    # 2. ULAŞIM VE LOKASYON
+    if any(k in t for k in ['METRO', 'METROBUS', 'METROBÜS', 'MARMARAY', 'TRAMVAY']):
         oz.append("Ulaşım")
     if any(k in t for k in ['MARKET', 'ÇARŞI', 'AVM']):
         oz.append("Market / AVM")
     if any(k in t for k in ['MANZARA', 'DENİZ', 'BOĞAZ', 'ORMAN', 'GÖL']):
         oz.append("Manzara")
+        
+    # 3. BİNA VE DAİRE NİTELİKLERİ
     if any(k in t for k in ['SİTE', 'SITE']):
         oz.append("Site içinde")
     if any(k in t for k in ['HAVUZ', 'YÜZME HAVUZU']):
         oz.append("Havuz")
-    if any(k in t for k in ['OTOPARK', 'GARAJ', 'KAPALI OTOPARK']):
+    if any(k in t for k in ['KAPALI OTOPARK']):
+        oz.append("Kapalı Otopark")
+    elif any(k in t for k in ['OTOPARK', 'GARAJ']):
         oz.append("Otopark")
     if any(k in t for k in ['GÜVENLİK', '7/24', 'KAMERA']):
         oz.append("Güvenlik")
@@ -132,8 +144,11 @@ def basliktan_ozellik_cikar(baslik):
         oz.append("Dubleks")
     if any(k in t for k in ['BAHÇE KATI', 'BAHÇELİ', 'BAHCE']):
         oz.append("Bahçeli / Bahçe Katı")
-    if any(k in t for k in ['YERDEN ISITMA', 'KOMBİ', 'MERKEZİ ISITMA']):
-        oz.append("Isıtma Sistemi")
+    if any(k in t for k in ['ARA KAT']):
+        oz.append("Ara Kat")
+    if any(k in t for k in ['YERDEN ISITMA', 'KOMBİ', 'MERKEZİ ISITMA', 'MANTOLAMA', 'ISI YALITIM']):
+        oz.append("Isıtma / Yalıtım")
+        
     return oz
 
 @st.cache_resource(show_spinner="Veri seti ve algoritmalar yükleniyor...")
@@ -261,7 +276,6 @@ if menu_secim == "İlan Arama ve Filtreleme":
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # MOBİL UYUMLU DARALTILMIŞ FİLTRE PANELİ (VARSAYILAN: KAPALI)
     with st.expander("Filtreleri Göster / Gizle", expanded=False):
         if st.button("Filtre Seçimlerini Sıfırla"):
             st.session_state["f_il"] = "Önce İl Seçiniz"
@@ -273,8 +287,11 @@ if menu_secim == "İlan Arama ve Filtreleme":
             st.session_state["f_ulasim"] = "Tümü"
             st.session_state["f_market"] = "Tümü"
             st.session_state["f_hastane"] = "Tümü"
+            st.session_state["c_deprem"] = False
+            st.session_state["c_kentsel"] = False
             st.session_state["c_site"] = False
             st.session_state["c_havuz"] = False
+            st.session_state["c_asansor"] = False
             st.session_state["c_otopark"] = False
             st.session_state["c_ebeveyn"] = False
             st.session_state["c_dubleks"] = False
@@ -326,22 +343,28 @@ if menu_secim == "İlan Arama ve Filtreleme":
             f_market = st.selectbox("Ticari Alan / AVM", ["Tümü", "1.5 km'den yakın"], key="f_market")
             f_hastane = st.selectbox("Sağlık Kuruluşu", ["Tümü", "2 km'den yakın"], key="f_hastane")
 
-        st.markdown("##### Ek Nitelikler")
+        st.markdown("##### 🛡️ Deprem Güvenliği & Yapı Nitelikleri")
+        d1, d2 = st.columns(2)
+        with d1:
+            f_deprem = st.checkbox("Deprem Yönetmeliğine Uygun / Radye Temel", key="c_deprem")
+        with d2:
+            f_kentsel = st.checkbox("Kentsel Dönüşüm / Güçlendirilmiş / Hasarsız", key="c_kentsel")
+
+        st.markdown("##### 🏢 Bina ve Konut Donatıları")
         o1, o2, o3, o4 = st.columns(4)
         with o1:
             f_site = st.checkbox("Site Yerleşimi", key="c_site")
             f_havuz = st.checkbox("Yüzme Havuzu", key="c_havuz")
         with o2:
-            f_otopark = st.checkbox("Otopark", key="c_otopark")
-            f_ebeveyn = st.checkbox("Ebeveyn Banyosu", key="c_ebeveyn")
+            f_asansor = st.checkbox("Asansörlü", key="c_asansor")
+            f_otopark = st.checkbox("Otopark / Kapalı Otopark", key="c_otopark")
         with o3:
+            f_ebeveyn = st.checkbox("Ebeveyn Banyosu", key="c_ebeveyn")
             f_dubleks = st.checkbox("Dubleks Yapı", key="c_dubleks")
-            f_bahce = st.checkbox("Bahçe Katı", key="c_bahce")
         with o4:
-            f_guvenlik = st.checkbox("Güvenlik Hizmeti", key="c_guvenlik")
+            f_bahce = st.checkbox("Bahçe Katı", key="c_bahce")
             f_sifir = st.checkbox("Sıfır / Yeni Bina", key="c_sifir")
 
-    # FİLTRE DEĞERLERİNİ UYGULAMA (SESSION STATE KONTROLÜ)
     selected_il = st.session_state.get("f_il", "Önce İl Seçiniz")
     selected_ilce = st.session_state.get("f_ilce", "Önce İl Seçiniz")
     selected_mahalle = st.session_state.get("f_mahalle", "Önce İlçe Seçiniz")
@@ -351,13 +374,15 @@ if menu_secim == "İlan Arama ve Filtreleme":
     f_ulasim = st.session_state.get("f_ulasim", "Tümü")
     f_market = st.session_state.get("f_market", "Tümü")
     f_hastane = st.session_state.get("f_hastane", "Tümü")
+    f_deprem = st.session_state.get("c_deprem", False)
+    f_kentsel = st.session_state.get("c_kentsel", False)
     f_site = st.session_state.get("c_site", False)
     f_havuz = st.session_state.get("c_havuz", False)
+    f_asansor = st.session_state.get("c_asansor", False)
     f_otopark = st.session_state.get("c_otopark", False)
     f_ebeveyn = st.session_state.get("c_ebeveyn", False)
     f_dubleks = st.session_state.get("c_dubleks", False)
     f_bahce = st.session_state.get("c_bahce", False)
-    f_guvenlik = st.session_state.get("c_guvenlik", False)
     f_sifir = st.session_state.get("c_sifir", False)
 
     filtered = df.copy()
@@ -377,16 +402,18 @@ if menu_secim == "İlan Arama ve Filtreleme":
     if f_market == "1.5 km'den yakın": filtered = filtered[filtered['market_mesafe_m'] <= 1500]
     if f_hastane == "2 km'den yakın": filtered = filtered[filtered['hastane_mesafe_m'] <= 2000]
 
+    if f_deprem: filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Deprem Yönetmeliğine Uygun"))]
+    if f_kentsel: filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Kentsel Dönüşüm / Güçlendirilmiş"))]
     if f_site: filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Site içinde"))]
     if f_havuz: filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Havuz"))]
+    if f_asansor: filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Asansör"))]
     if f_otopark: filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Otopark"))]
     if f_ebeveyn: filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Ebeveyn Banyolu"))]
     if f_dubleks: filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Dubleks"))]
     if f_bahce: filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Bahçeli"))]
-    if f_guvenlik: filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Güvenlik"))]
     if f_sifir: filtered = filtered[filtered['Ozellikler'].apply(lambda x: has_ozellik(x, "Sıfır"))]
 
-    arama = st.text_input("Metin Arama (İlan Başlığı / İlçe / Mahalle)", placeholder="Örn: 3+1, Kadıköy, metroya yakın...", key="arama_input")
+    arama = st.text_input("Metin Arama (İlan Başlığı / İlçe / Mahalle / Deprem / Radye)", placeholder="Örn: 3+1, Kadıköy, radye temel, ara kat, otopark...", key="arama_input")
     if arama:
         metin = arama.lower().strip()
         filtered = filtered[
@@ -437,7 +464,7 @@ if menu_secim == "İlan Arama ve Filtreleme":
 
         ozellikler = row['Ozellikler']
         if ozellikler:
-            st.markdown("**Tespit Edilen Yapı Nitelikleri:**")
+            st.markdown("**Tespit Edilen Yapı ve Güvenlik Nitelikleri:**")
             etiket_html = " ".join([f'<span class="ozellik-etiket">{o}</span>' for o in ozellikler])
             st.markdown(etiket_html, unsafe_allow_html=True)
 
@@ -490,12 +517,13 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
     st.markdown("##### Ek Yapı Nitelikleri")
     sc1, sc2, sc3 = st.columns(3)
     with sc1:
+        s_deprem = st.checkbox("Deprem Yönetmeliğine Uygun", key="v_deprem")
         s_site = st.checkbox("Site İçerisinde", key="v_site")
-        s_havuz = st.checkbox("Yüzme Havuzu Mevcut", key="v_havuz")
     with sc2:
+        s_havuz = st.checkbox("Yüzme Havuzu Mevcut", key="v_havuz")
         s_otopark = st.checkbox("Otopark Mevcut", key="v_otopark")
-        s_ebeveyn = st.checkbox("Ebeveyn Banyosu Mevcut", key="v_ebeveyn")
     with sc3:
+        s_ebeveyn = st.checkbox("Ebeveyn Banyosu Mevcut", key="v_ebeveyn")
         s_sifir = st.checkbox("Sıfır / Yeni Yapı", key="v_sifir")
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -522,6 +550,7 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
             pred_high = float(np.expm1(model_high.predict(input_data)[0]))
             
             multiplier = 1.0
+            if s_deprem: multiplier *= 1.05
             if s_site: multiplier *= 1.04
             if s_havuz: multiplier *= 1.03
             if s_otopark: multiplier *= 1.02
