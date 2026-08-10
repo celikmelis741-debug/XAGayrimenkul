@@ -67,7 +67,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("XAI Gayrimenkul Değerleme Platformu")
-st.caption("CatBoost + SHAP Model Açıklanabilirliği & Quantile Regression")
+st.caption("CatBoost + SHAP Model Açıklanabilirliği & İlan Karşılaştırma Modülü")
 
 # =========================================================
 # 2. VERİ VE MODEL
@@ -141,14 +141,12 @@ def load_model_and_data():
 
     X_train, X_test, y_train, y_test = train_test_split(X, y_log, test_size=0.2, random_state=42)
     
-    # Ana Model
     model_mid = CatBoostRegressor(
         iterations=600, learning_rate=0.05, depth=6,
         cat_features=['Semt'], verbose=0, random_seed=42
     )
     model_mid.fit(X_train, y_train)
 
-    # Quantile Modelleri
     model_low = CatBoostRegressor(
         iterations=600, learning_rate=0.05, depth=6,
         loss_function='Quantile:alpha=0.10',
@@ -163,7 +161,6 @@ def load_model_and_data():
     )
     model_high.fit(X_train, y_train)
 
-    # SHAP Explainer
     explainer = shap.TreeExplainer(model_mid)
 
     y_pred = np.expm1(model_mid.predict(X_test))
@@ -357,6 +354,41 @@ with tab1:
             st.markdown("**Başlıkta geçen özellikler:**", unsafe_allow_html=True)
             st.markdown(etiket_html, unsafe_allow_html=True)
 
+        # ---------------------------------------------------------
+        # 2. ADIM GELİŞTİRMESİ: İLAN KARŞILAŞTIRMA MODÜLÜ
+        # ---------------------------------------------------------
+        st.divider()
+        st.subheader("⚖️ İlan Karşılaştırma Modülü")
+        st.caption("Aşağıdaki listeden karşılaştırmak istediğiniz 2 veya 3 ilanı seçin.")
+
+        secilen_ilanlar = st.multiselect(
+            "Karşılaştırılacak İlanları Seçin:",
+            options=show_df['İlan Başlığı'].tolist(),
+            max_selections=3,
+            key="kiyas_secim"
+        )
+
+        if len(secilen_ilanlar) >= 2:
+            cols = st.columns(len(secilen_ilanlar))
+            for idx, baslik in enumerate(secilen_ilanlar):
+                k_row = show_df[show_df['İlan Başlığı'] == baslik].iloc[0]
+                with cols[idx]:
+                    st.markdown(f"### İlan {idx+1}")
+                    st.markdown(f"**{k_row['İlan Başlığı'][:40]}...**")
+                    st.metric("Fiyat", f"{k_row['Fiyat']:,.0f} TL")
+                    st.metric("Brüt m²", f"{k_row['m² (Brüt)']} m²")
+                    st.metric("m² Birim Fiyatı", f"{k_row['fiyat_m2']:,.0f} TL/m²")
+                    st.write(f"**Konum:** {k_row['İlçe']} / {k_row['Mahalle']}")
+                    st.write(f"**Oda Düzeni:** {k_row['Oda Düzeni']}")
+                    st.write(f"**Toplu Ulaşım:** ~{k_row['ulasim_mesafe_m']} m")
+                    st.write(f"**Market / AVM:** ~{k_row['market_mesafe_m']} m")
+                    
+                    k_oz = k_row['Ozellikler']
+                    if k_oz:
+                        st.write("**Özellikler:** " + ", ".join(k_oz))
+        elif len(secilen_ilanlar) == 1:
+            st.info("Karşılaştırma yapmak için lütfen en az 1 ilan daha seçin.")
+
 # -------------------- TAB 2 --------------------
 with tab2:
     st.subheader("Evimi Ne Kadara Satarım?")
@@ -416,7 +448,6 @@ with tab2:
         m2.metric("Alt Bant Tahmini (%10 Quantile)", f"{pred_low:,.0f} TL")
         m3.metric("Üst Bant Tahmini (%90 Quantile)", f"{pred_high:,.0f} TL")
 
-        # 2. ADIM GELİŞTİRMESİ: BİREYSEL İLAN SHAP DEĞERLERİ İLE FİYAT AÇIKLAMASI
         st.divider()
         st.subheader("💡 Yapay Zeka Fiyat Açıklaması (SHAP Analizi)")
         st.caption("Aşağıdaki grafik, girdiğiniz her özelliğin tahmini fiyata yaptığı pozitif veya negatif etkiyi gösterir.")
@@ -424,8 +455,6 @@ with tab2:
         try:
             shap_vals = explainer.shap_values(input_data)[0]
             feature_names = ['m² (Brüt)', 'Oda Sayısı', 'Salon Sayısı', 'Oda Başı m²', 'Semt / İlçe']
-            
-            # Log bazlı SHAP değerlerini yaklaşık TL etkisine çevirme
             shap_tl = [pred_mid * val for val in shap_vals]
             
             shap_df = pd.DataFrame({
@@ -491,13 +520,11 @@ with tab4:
     st.subheader("Model Açıklanabilirliği (SHAP)")
     st.caption(f"R²: **%{model_r2*100:.2f}** | MAE: {model_mae:,.0f} TL | Veri: {len(df):,}")
     
-    # 2. ADIM GELİŞTİRMESİ: GENEL MODEL SHAP DEĞERLERİ
     try:
         sample_x = X_test_sample.head(200)
         shap_values_gen = explainer.shap_values(sample_x)
         feature_names = ['m² (Brüt)', 'Oda Sayısı', 'Salon Sayısı', 'Oda Başı m²', 'Semt / İlçe']
 
-        # Mutlak SHAP önem seviyesi
         abs_shap = np.abs(shap_values_gen).mean(axis=0)
         f_df_shap = pd.DataFrame({'Öznitelik': feature_names, 'SHAP Önem Seviyesi': abs_shap}).sort_values('SHAP Önem Seviyesi')
 
