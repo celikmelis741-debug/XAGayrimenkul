@@ -589,7 +589,7 @@ elif menu_secim == "Coğrafi Harita Analizi":
         hm3.metric("Bölge Ortalama m² Birim Fiyatı", f"{map_filtered['fiyat_m2'].mean():,.0f} TL")
 
 # =========================================================
-# MODÜL 4: KONUT KREDİSİ SİMÜLASYONU (GÜNÇEL BANKA ORANLARI)
+# MODÜL 4: KONUT KREDİSİ SİMÜLASYONU (MANÜEL VEYA BANKA ORANI)
 # =========================================================
 elif menu_secim == "Konut Kredisi Simülasyonu":
     st.title("Konut Kredisi Hesaplama Modülü")
@@ -603,7 +603,7 @@ elif menu_secim == "Konut Kredisi Simülasyonu":
     """, unsafe_allow_html=True)
 
     banka_seçimi = st.selectbox(
-        "Banka Seçiniz:",
+        "Banka veya Seçim Türü:",
         [
             "Ziraat Bankası (Kamu) - %2.79",
             "VakıfBank (Kamu) - %2.79",
@@ -613,7 +613,7 @@ elif menu_secim == "Konut Kredisi Simülasyonu":
             "İş Bankası - %3.08",
             "Yapı Kredi - %3.12",
             "QNB Finansbank - %3.15",
-            "Özel Faiz Oranı Girişi"
+            "Özel Faiz Oranı Girişi (Manuel)"
         ],
         key="banka_secim"
     )
@@ -625,8 +625,9 @@ elif menu_secim == "Konut Kredisi Simülasyonu":
     with col2:
         vade = st.selectbox("Geri Ödeme Vadesi (Ay)", [36, 48, 60, 84, 120, 180, 240], index=4, key="kredi_page_vade")
         
-        if banka_seçimi == "Özel Faiz Oranı Girişi":
-            faiz = st.number_input("Aylık Akdi Faiz Oranı (%)", 0.1, 10.0, 2.79, 0.01, key="kredi_page_faiz")
+        if "Özel Faiz Oranı" in banka_seçimi:
+            faiz = st.number_input("Aylık Akdi Faiz Oranı (%) Giriniz", 0.1, 10.0, 3.00, 0.01, key="kredi_page_faiz")
+            st.info(f"Manuel olarak belirlenen aylık faiz oranı: %{faiz}")
         elif "Kamu" in banka_seçimi:
             faiz = 2.79
             st.info("Kamu bankası referans aylık faiz oranı: %2.79")
