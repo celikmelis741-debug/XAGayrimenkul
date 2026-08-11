@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 import re
 import os
 from datetime import datetime
-from weasyprint import HTML
+from fpdf import FPDF
 from io import BytesIO
 
 # =========================================================
@@ -206,7 +206,7 @@ def has_ozellik(lst, aranan):
     return any(aranan.lower() in o.lower() for o in lst)
 
 # =========================================================
-# PDF RAPOR ÜRETME FONKSİYONU
+# PDF RAPOR ÜRETME FONKSİYONU (fpdf2)
 # =========================================================
 def generate_valuation_pdf(
     lokasyon, brut_alan, bina_yasi, oda_yapisi,
@@ -214,184 +214,145 @@ def generate_valuation_pdf(
     tahmini_kira, amortisman_yil, yillik_getiri,
     rapor_tarih, rapor_no
 ):
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <style>
-            @page {{ size: A4; margin: 0; }}
-            body {{
-                font-family: 'Segoe UI', Arial, sans-serif;
-                margin: 0; padding: 0;
-                background: #ffffff;
-                color: #1e293b;
-            }}
-            .header {{
-                background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%);
-                color: white;
-                padding: 28px 40px 20px 40px;
-                position: relative;
-                overflow: hidden;
-            }}
-            .header::after {{
-                content: '';
-                position: absolute;
-                top: 0; right: 0;
-                width: 45%; height: 100%;
-                background: url('https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800') center/cover;
-                opacity: 0.85;
-                border-radius: 0 0 0 80px;
-            }}
-            .logo-title {{
-                position: relative; z-index: 2;
-            }}
-            .logo-title h1 {{
-                margin: 0; font-size: 26px; font-weight: 700;
-                letter-spacing: 0.5px;
-            }}
-            .logo-title p {{
-                margin: 6px 0 0 0; font-size: 13px; opacity: 0.9;
-            }}
-            .meta {{
-                position: absolute; top: 28px; right: 40px;
-                text-align: right; font-size: 12px; z-index: 2;
-                background: rgba(15,23,42,0.7); padding: 8px 14px; border-radius: 8px;
-            }}
-            .section {{
-                padding: 22px 40px;
-            }}
-            .section-title {{
-                display: flex; align-items: center; gap: 10px;
-                font-size: 15px; font-weight: 700; color: #0f172a;
-                margin-bottom: 16px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;
-            }}
-            .info-grid {{
-                display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
-            }}
-            .info-card {{
-                background: #f8fafc; border: 1px solid #e2e8f0;
-                border-radius: 12px; padding: 16px; text-align: center;
-            }}
-            .info-card .label {{ font-size: 12px; color: #64748b; margin-bottom: 4px; }}
-            .info-card .value {{ font-size: 18px; font-weight: 700; color: #0f172a; }}
-            
-            .value-box {{
-                background: linear-gradient(135deg, #1e3a5f, #0f172a);
-                color: white; border-radius: 16px; padding: 24px;
-                text-align: center; margin-bottom: 16px;
-            }}
-            .value-box .label {{ font-size: 13px; opacity: 0.85; }}
-            .value-box .amount {{ font-size: 32px; font-weight: 800; margin: 8px 0; }}
-            
-            .bands {{
-                display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
-            }}
-            .band {{
-                border-radius: 12px; padding: 14px; text-align: center;
-            }}
-            .band.high {{ background: #ecfdf5; border: 1px solid #10b981; color: #065f46; }}
-            .band.low  {{ background: #fef2f2; border: 1px solid #ef4444; color: #991b1b; }}
-            .band .label {{ font-size: 11px; font-weight: 600; }}
-            .band .amount {{ font-size: 18px; font-weight: 700; margin-top: 4px; }}
-            
-            .invest-grid {{
-                display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
-            }}
-            .invest-card {{
-                background: #f8fafc; border: 1px solid #e2e8f0;
-                border-radius: 12px; padding: 18px; text-align: center;
-            }}
-            .invest-card .label {{ font-size: 12px; color: #64748b; }}
-            .invest-card .value {{ font-size: 20px; font-weight: 700; color: #0f172a; margin-top: 6px; }}
-            
-            .footer {{
-                background: #0f172a; color: #94a3b8;
-                padding: 16px 40px; font-size: 11px; text-align: center;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            <div class="logo-title">
-                <h1>GAYRİMENKUL VE<br>DEĞERLENDİRME ANALİZİ</h1>
-                <p>Değer Analizi ile Doğru Yatırım Kararları</p>
-            </div>
-            <div class="meta">
-                📅 Tarih: {rapor_tarih}<br>
-                📄 Rapor No: {rapor_no}
-            </div>
-        </div>
+    class PDF(FPDF):
+        def header(self):
+            pass
+        def footer(self):
+            self.set_y(-15)
+            self.set_font('Helvetica', 'I', 8)
+            self.set_text_color(100, 100, 100)
+            self.cell(0, 10, 'Bu rapor mevcut veriler ve yapay zeka destekli analizler dogrultusunda hazirlanmistir.', 0, 0, 'C')
 
-        <div class="section">
-            <div class="section-title">🏠 TAŞINMAZ BİLGİLERİ</div>
-            <div class="info-grid">
-                <div class="info-card">
-                    <div class="label">Lokasyon</div>
-                    <div class="value">{lokasyon}</div>
-                </div>
-                <div class="info-card">
-                    <div class="label">Brüt Alan</div>
-                    <div class="value">{brut_alan} m²</div>
-                </div>
-                <div class="info-card">
-                    <div class="label">Bina Yaşı</div>
-                    <div class="value">{bina_yasi} Yıl</div>
-                </div>
-                <div class="info-card">
-                    <div class="label">Oda Yapısı</div>
-                    <div class="value">{oda_yapisi}</div>
-                </div>
-            </div>
-        </div>
+    pdf = PDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
 
-        <div class="section" style="padding-top:0;">
-            <div class="section-title">⚖️ DEĞERLEME SONUÇLARI (CATBOOST REGRESSION)</div>
-            
-            <div class="value-box">
-                <div class="label">Tahmini Piyasa Satış Bedeli</div>
-                <div class="amount">{pred_mid:,.0f} TL</div>
-            </div>
-            
-            <div class="bands">
-                <div class="band high">
-                    <div class="label">ÜST BANT (%90 Quantile / Tavan Satış)</div>
-                    <div class="amount">{pred_high:,.0f} TL</div>
-                </div>
-                <div class="band low">
-                    <div class="label">ALT BANT (%10 Quantile / Hızlı Satış)</div>
-                    <div class="amount">{pred_low:,.0f} TL</div>
-                </div>
-            </div>
-        </div>
+    # Üst Başlık
+    pdf.set_fill_color(15, 23, 42)
+    pdf.rect(0, 0, 210, 45, 'F')
+    
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font('Helvetica', 'B', 16)
+    pdf.set_xy(15, 12)
+    pdf.cell(0, 8, 'GAYRIMENKUL VE DEGERLENDIRME ANALIZI', 0, 1)
+    
+    pdf.set_font('Helvetica', '', 10)
+    pdf.set_xy(15, 24)
+    pdf.cell(0, 6, 'Deger Analizi ile Dogru Yatirim Kararlari', 0, 1)
 
-        <div class="section" style="padding-top:0;">
-            <div class="section-title">📈 YATIRIM VE AMORTİSMAN ANALİZİ</div>
-            <div class="invest-grid">
-                <div class="invest-card">
-                    <div class="label">Tahmini Aylık Kira Potansiyeli</div>
-                    <div class="value">{tahmini_kira:,.0f} TL / Ay</div>
-                </div>
-                <div class="invest-card">
-                    <div class="label">Amortisman Süresi</div>
-                    <div class="value">{amortisman_yil:.1f} Yıl</div>
-                </div>
-                <div class="invest-card">
-                    <div class="label">Yıllık Brüt Getiri Oranı</div>
-                    <div class="value">%{yillik_getiri:.2f}</div>
-                </div>
-            </div>
-        </div>
+    pdf.set_font('Helvetica', '', 9)
+    pdf.set_xy(130, 12)
+    pdf.cell(0, 6, f'Tarih: {rapor_tarih}', 0, 1)
+    pdf.set_xy(130, 18)
+    pdf.cell(0, 6, f'{rapor_no}', 0, 1)
 
-        <div class="footer">
-            Bu rapor, mevcut veriler ve yapay zeka destekli analizler doğrultusunda hazırlanmıştır.<br>
-            Yatırım kararlarınızı almadan önce profesyonel danışmanlık almanız önerilir.
-        </div>
-    </body>
-    </html>
-    """
-    pdf_bytes = HTML(string=html_content).write_pdf()
-    return pdf_bytes
+    # Taşınmaz Bilgileri
+    pdf.set_text_color(15, 23, 42)
+    pdf.set_font('Helvetica', 'B', 12)
+    pdf.set_xy(15, 55)
+    pdf.cell(0, 8, 'TASINMAZ BILGILERI', 0, 1)
+
+    box_w = 42
+    box_h = 22
+    start_x = 15
+    y = 65
+
+    bilgiler = [
+        ("Lokasyon", lokasyon),
+        ("Brut Alan", f"{brut_alan} m2"),
+        ("Bina Yasi", f"{bina_yasi} Yil"),
+        ("Oda Yapisi", oda_yapisi)
+    ]
+
+    for i, (label, value) in enumerate(bilgiler):
+        x = start_x + i * (box_w + 5)
+        pdf.set_fill_color(248, 250, 252)
+        pdf.set_draw_color(200, 200, 200)
+        pdf.rect(x, y, box_w, box_h, 'DF')
+        
+        pdf.set_font('Helvetica', '', 8)
+        pdf.set_text_color(100, 100, 100)
+        pdf.set_xy(x + 2, y + 3)
+        pdf.cell(box_w - 4, 5, label, 0, 1, 'C')
+        
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.set_text_color(15, 23, 42)
+        pdf.set_xy(x + 2, y + 11)
+        pdf.cell(box_w - 4, 8, str(value)[:18], 0, 1, 'C')
+
+    # Değerleme Sonuçları
+    pdf.set_font('Helvetica', 'B', 12)
+    pdf.set_text_color(15, 23, 42)
+    pdf.set_xy(15, 95)
+    pdf.cell(0, 8, 'DEGERLEME SONUCLARI (CATBOOST REGRESSION)', 0, 1)
+
+    # Ana fiyat kutusu
+    pdf.set_fill_color(30, 58, 95)
+    pdf.rect(15, 105, 180, 28, 'F')
+    
+    pdf.set_text_color(200, 220, 255)
+    pdf.set_font('Helvetica', '', 10)
+    pdf.set_xy(15, 108)
+    pdf.cell(180, 6, 'Tahmini Piyasa Satis Bedeli', 0, 1, 'C')
+    
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font('Helvetica', 'B', 18)
+    pdf.set_xy(15, 116)
+    pdf.cell(180, 12, f'{pred_mid:,.0f} TL', 0, 1, 'C')
+
+    # Üst ve Alt Bant
+    pdf.set_fill_color(236, 253, 245)
+    pdf.set_draw_color(16, 185, 129)
+    pdf.rect(15, 138, 87, 22, 'DF')
+    pdf.set_text_color(6, 95, 70)
+    pdf.set_font('Helvetica', '', 8)
+    pdf.set_xy(15, 140)
+    pdf.cell(87, 5, 'UST BANT (%90 / Tavan Satis)', 0, 1, 'C')
+    pdf.set_font('Helvetica', 'B', 12)
+    pdf.set_xy(15, 147)
+    pdf.cell(87, 8, f'{pred_high:,.0f} TL', 0, 1, 'C')
+
+    pdf.set_fill_color(254, 242, 242)
+    pdf.set_draw_color(239, 68, 68)
+    pdf.rect(108, 138, 87, 22, 'DF')
+    pdf.set_text_color(153, 27, 27)
+    pdf.set_font('Helvetica', '', 8)
+    pdf.set_xy(108, 140)
+    pdf.cell(87, 5, 'ALT BANT (%10 / Hizli Satis)', 0, 1, 'C')
+    pdf.set_font('Helvetica', 'B', 12)
+    pdf.set_xy(108, 147)
+    pdf.cell(87, 8, f'{pred_low:,.0f} TL', 0, 1, 'C')
+
+    # Yatırım Analizi
+    pdf.set_font('Helvetica', 'B', 12)
+    pdf.set_text_color(15, 23, 42)
+    pdf.set_xy(15, 170)
+    pdf.cell(0, 8, 'YATIRIM VE AMORTISMAN ANALIZI', 0, 1)
+
+    yatirimlar = [
+        ("Tahmini Aylik Kira", f"{tahmini_kira:,.0f} TL/Ay"),
+        ("Amortisman Suresi", f"{amortisman_yil:.1f} Yil"),
+        ("Yillik Brut Getiri", f"%{yillik_getiri:.2f}")
+    ]
+
+    box_w2 = 58
+    for i, (label, value) in enumerate(yatirimlar):
+        x = 15 + i * (box_w2 + 5)
+        pdf.set_fill_color(248, 250, 252)
+        pdf.set_draw_color(200, 200, 200)
+        pdf.rect(x, 180, box_w2, 25, 'DF')
+        
+        pdf.set_font('Helvetica', '', 8)
+        pdf.set_text_color(100, 100, 100)
+        pdf.set_xy(x, 183)
+        pdf.cell(box_w2, 5, label, 0, 1, 'C')
+        
+        pdf.set_font('Helvetica', 'B', 11)
+        pdf.set_text_color(15, 23, 42)
+        pdf.set_xy(x, 191)
+        pdf.cell(box_w2, 8, value, 0, 1, 'C')
+
+    return bytes(pdf.output())
 
 # =========================================================
 # 3. KONTROL PANELİ / SOL MENÜ
@@ -685,10 +646,9 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
         amortisman_yil = pred_mid / (tahmini_aylik_kira * 12)
         yillik_getiri_yuzde = ((tahmini_aylik_kira * 12) / pred_mid) * 100
 
-        # --- GÖRSEL RAPOR DASHBOARD GÖRÜNÜMÜ ---
+        # --- GÖRSEL RAPOR DASHBOARD ---
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Üst Başlık Kartı
         rapor_no = f"Rapor No: SM-AI-{datetime.now().strftime('%Y%m%d')}-001"
         rapor_tarih = datetime.now().strftime('%d/%m/%Y %H:%M')
         
@@ -707,7 +667,6 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
         </div>
         """, unsafe_allow_html=True)
 
-        # Bölüm 1: Taşınmaz Bilgileri Kutuları
         st.markdown("#### 🏠 TAŞINMAZ BİLGİLERİ")
         b1, b2, b3, b4 = st.columns(4)
         b1.metric("Lokasyon", f"İstanbul / {s_ilce}")
@@ -717,7 +676,6 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Bölüm 2: Değerleme Sonuçları ve Dağılım Grafiği
         st.markdown("#### ⚖️ DEĞERLEME SONUÇLARI (CATBOOST REGRESSION)")
         
         dg1, dg2 = st.columns([1.2, 1.8])
@@ -753,7 +711,7 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
             fig_curve.add_annotation(x=pred_high, y=0.1, text=f"%90 (Tavan)<br>{pred_high:,.0f} TL", showarrow=True, arrowhead=1, ax=30, ay=20, font=dict(color="#10B981", size=10))
 
             fig_curve.update_layout(
-                title=dict(text="<b>Fiyat Dağılımı Aralığı (Probability Distribution)</b>", font=dict(size=14, color="#F8FAFC")),
+                title=dict(text="<b>Fiyat Dağılımı Aralığı</b>", font=dict(size=14, color="#F8FAFC")),
                 template="plotly_dark",
                 paper_bgcolor="#111827",
                 plot_bgcolor="#111827",
@@ -766,7 +724,6 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Bölüm 3: Yatırım ve Amortisman Analizi
         st.markdown("#### 📈 YATIRIM VE AMORTİSMAN ANALİZİ")
         y1, y2, y3 = st.columns(3)
         y1.metric("Tahmini Aylık Kira Potansiyeli", f"{tahmini_aylik_kira:,.0f} TL / Ay")
@@ -803,9 +760,9 @@ Bu rapor mevcut veriler ve yapay zeka destekli analizler doğrultusunda hazırla
             mime="text/plain"
         )
 
-        # ========== PROFESYONEL PDF RAPOR ==========
+        # PDF İndirme
         pdf_bytes = generate_valuation_pdf(
-            lokasyon=f"İstanbul / {s_ilce}",
+            lokasyon=f"Istanbul / {s_ilce}",
             brut_alan=s_brut,
             bina_yasi=s_bina_yasi,
             oda_yapisi=f"{s_oda}+{s_salon}",
@@ -820,7 +777,7 @@ Bu rapor mevcut veriler ve yapay zeka destekli analizler doğrultusunda hazırla
         )
 
         st.download_button(
-            label="📥 Profesyonel PDF Raporu İndir (Görsel Tasarım)",
+            label="📥 Profesyonel PDF Raporu İndir",
             data=pdf_bytes,
             file_name=f"Gayrimenkul_Degerleme_Raporu_{s_ilce}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
             mime="application/pdf",
