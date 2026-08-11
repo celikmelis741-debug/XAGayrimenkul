@@ -10,7 +10,6 @@ import re
 import os
 from datetime import datetime
 from fpdf import FPDF
-from io import BytesIO
 
 # =========================================================
 # 1. SAYFA AYARLARI VE KURUMSAL TEMA (CSS)
@@ -206,15 +205,14 @@ def has_ozellik(lst, aranan):
     return any(aranan.lower() in o.lower() for o in lst)
 
 # =========================================================
-# PDF RAPOR ÜRETME FONKSİYONU (fpdf2)
+# PDF RAPOR ÜRETME FONKSİYONU
 # =========================================================
- def generate_valuation_pdf(
+def generate_valuation_pdf(
     lokasyon, brut_alan, bina_yasi, oda_yapisi,
     pred_mid, pred_low, pred_high,
     tahmini_kira, amortisman_yil, yillik_getiri,
     rapor_tarih, rapor_no
 ):
-    # Türkçe karakterleri güvenli hale getir
     def temizle(text):
         if text is None:
             return ""
@@ -240,13 +238,13 @@ def has_ozellik(lst, aranan):
             self.set_y(-12)
             self.set_font('Helvetica', 'I', 8)
             self.set_text_color(120, 120, 120)
-            self.cell(0, 8, 'Bu rapor mevcut veriler ve yapay zeka destekli analizler dogrultusunda hazirlanmistir. Yatirim kararlarinizdan once profesyonel danismanlik aliniz.', 0, 0, 'C')
+            self.cell(0, 8, 'Bu rapor mevcut veriler ve yapay zeka destekli analizler dogrultusunda hazirlanmistir.', 0, 0, 'C')
 
     pdf = PDF()
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=12)
 
-    # ========== ÜST BAŞLIK (Koyu mavi) ==========
+    # Üst Başlık
     pdf.set_fill_color(15, 23, 42)
     pdf.rect(0, 0, 210, 48, 'F')
 
@@ -265,13 +263,12 @@ def has_ozellik(lst, aranan):
     pdf.set_xy(125, 21)
     pdf.cell(0, 5, f'{rapor_no}', 0, 1)
 
-    # ========== TAŞINMAZ BİLGİLERİ ==========
+    # Taşınmaz Bilgileri
     pdf.set_text_color(15, 23, 42)
     pdf.set_font('Helvetica', 'B', 12)
     pdf.set_xy(14, 58)
     pdf.cell(0, 7, 'TASINMAZ BILGILERI', 0, 1)
 
-    # 4 bilgi kartı
     kartlar = [
         ("Lokasyon", lokasyon),
         ("Brut Alan", f"{brut_alan} m2"),
@@ -300,13 +297,12 @@ def has_ozellik(lst, aranan):
         pdf.set_xy(x, y + 12)
         pdf.cell(kart_w, 7, str(deger)[:20], 0, 1, 'C')
 
-    # ========== DEĞERLEME SONUÇLARI ==========
+    # Değerleme Sonuçları
     pdf.set_font('Helvetica', 'B', 12)
     pdf.set_text_color(15, 23, 42)
     pdf.set_xy(14, 100)
     pdf.cell(0, 7, 'DEGERLEME SONUCLARI (CATBOOST REGRESSION)', 0, 1)
 
-    # Ana fiyat kutusu (koyu)
     pdf.set_fill_color(30, 58, 95)
     pdf.rect(14, 110, 182, 30, 'F')
 
@@ -344,7 +340,7 @@ def has_ozellik(lst, aranan):
     pdf.set_xy(108, 157)
     pdf.cell(88, 8, f'{pred_low:,.0f} TL', 0, 1, 'C')
 
-    # ========== YATIRIM ANALİZİ ==========
+    # Yatırım Analizi
     pdf.set_font('Helvetica', 'B', 12)
     pdf.set_text_color(15, 23, 42)
     pdf.set_xy(14, 180)
@@ -667,7 +663,6 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
         amortisman_yil = pred_mid / (tahmini_aylik_kira * 12)
         yillik_getiri_yuzde = ((tahmini_aylik_kira * 12) / pred_mid) * 100
 
-        # --- GÖRSEL RAPOR DASHBOARD ---
         st.markdown("<br>", unsafe_allow_html=True)
         
         rapor_no = f"Rapor No: SM-AI-{datetime.now().strftime('%Y%m%d')}-001"
