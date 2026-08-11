@@ -3,8 +3,9 @@ import pandas as pd
 import numpy as np
 from catboost import CatBoostRegressor
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
+from sklearn.metrics import r2_score, mean_absolute_error
 import plotly.express as px
+import plotly.graph_objects as go
 import re
 import os
 from datetime import datetime
@@ -69,12 +70,12 @@ st.markdown("""
         margin: 3px 4px;
         border: 1px solid #2B4C7E;
     }
-    .rapor-kart {
-        background-color: #111827;
-        border: 1px solid #3B82F6;
-        border-radius: 8px;
-        padding: 20px;
-        margin-top: 15px;
+    .rapor-baslik-kutu {
+        background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
+        border: 1px solid #334155;
+        border-radius: 10px;
+        padding: 24px;
+        margin-bottom: 25px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -420,7 +421,7 @@ if menu_secim == "İlan Arama ve Filtreleme":
             st.markdown(etiket_html, unsafe_allow_html=True)
 
 # =========================================================
-# MODÜL 2: GAYRİMENKUL DEĞERLEME MODÜLÜ
+# MODÜL 2: GAYRİMENKUL DEĞERLEME MODÜLÜ (GÖRSEL DASHBOARD RAPORU)
 # =========================================================
 elif menu_secim == "Gayrimenkul Değerleme Modülü":
     st.title("Otomatik Gayrimenkul Değerleme Paneli")
@@ -490,47 +491,124 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
         pred_low *= multiplier
         pred_high *= multiplier
 
-        st.success("Değerleme Hesaplaması Tamamlandı")
-        
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Tahmini Piyasa Bedeli (%50)", f"{pred_mid:,.0f} TL")
-        m2.metric("Hızlı Satış Alt Bandı (%10)", f"{pred_low:,.0f} TL")
-        m3.metric("Maksimum Satış Bandı (%90)", f"{pred_high:,.0f} TL")
-
         tahmini_aylik_kira = pred_mid / 220
         amortisman_yil = pred_mid / (tahmini_aylik_kira * 12)
         yillik_getiri_yuzde = ((tahmini_aylik_kira * 12) / pred_mid) * 100
 
-        st.divider()
-        st.markdown("### Yatırım ve Amortisman Analizi")
+        # --- GÖRSEL RAPOR DASHBOARD GÖRÜNÜMÜ ---
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Üst Başlık Kartı
+        rapor_no = f"Rapor No: SM-AI-{datetime.now().strftime('%Y%m%d')}-001"
+        rapor_tarih = datetime.now().strftime('%d/%m/%Y %H:%M')
+        
+        st.markdown(f"""
+        <div class="rapor-baslik-kutu">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h2 style="margin: 0; color: #F8FAFC; font-size: 1.8rem;">GAYRİMENKUL VE DEĞERLENDİRME ANALİZİ</h2>
+                    <p style="color: #94A3B8; margin: 5px 0 0 0; font-size: 0.95rem;">Değer Analizi ile Doğru Yatırım Kararları | Mevcut piyasa koşulları doğrultusunda analiz edilmiştir.</p>
+                </div>
+                <div style="text-align: right; color: #94A3B8; font-size: 0.85rem;">
+                    <div>📅 Tarih: {rapor_tarih}</div>
+                    <div>📄 {rapor_no}</div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Bölüm 1: Taşınmaz Bilgileri Kutuları
+        st.markdown("#### 🏠 TAŞINMAZ BİLGİLERİ")
+        b1, b2, b3, b4 = st.columns(4)
+        b1.metric("Lokasyon", f"İstanbul / {s_ilce}")
+        b2.metric("Brüt Alan", f"{s_brut} m²")
+        b3.metric("Bina Yaşı", f"{s_bina_yasi} Yıl")
+        b4.metric("Oda Yapısı", f"{s_oda}+{s_salon}")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Bölüm 2: Değerleme Sonuçları ve Dağılım Grafiği
+        st.markdown("#### ⚖️ DEĞERLEME SONUÇLARI (CATBOOST REGRESSION)")
+        
+        dg1, dg2 = st.columns([1.2, 1.8])
+        with dg1:
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #1E3A5F 0%, #111827 100%); border: 1px solid #3B82F6; border-radius: 10px; padding: 25px; text-align: center; margin-bottom: 10px;">
+                <div style="color: #93C5FD; font-size: 0.95rem; font-weight: 600; text-transform: uppercase;">Tahmini Piyasa Satış Bedeli</div>
+                <div style="color: #FFFFFF; font-size: 2.2rem; font-weight: 800; margin: 10px 0;">{pred_mid:,.0f} TL</div>
+                <div style="color: #94A3B8; font-size: 0.8rem;">Yapay Zeka Ortalama Değerleme Tahmini</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            d_alt, d_ust = st.columns(2)
+            with d_alt:
+                st.metric("ALT BANT (%10)", f"{pred_low:,.0f} TL")
+            with d_ust:
+                st.metric("ÜST BANT (%90)", f"{pred_high:,.0f} TL")
+
+        with dg2:
+            # Görseldeki Fiyat Dağılım Eğrisi Benzeri Grafik
+            x_vals = np.linspace(pred_low * 0.7, pred_high * 1.3, 200)
+            y_vals = np.exp(-((x_vals - pred_mid) ** 2) / (2 * ((pred_high - pred_low) / 4) ** 2))
+            
+            fig_curve = go.Figure()
+            fig_curve.add_trace(go.Scatter(
+                x=x_vals, y=y_vals, mode='lines',
+                line=dict(color='#3B82F6', width=3),
+                fill='tozeroy', fillcolor='rgba(59, 130, 246, 0.15)',
+                hoverinfo='skip'
+            ))
+            
+            # Kritik Noktalar
+            fig_curve.add_annotation(x=pred_mid, y=1.05, text=f"<b>Tahmini Değer</b><br>{pred_mid:,.0f} TL", showarrow=True, arrowhead=2, ax=0, ay=-35, font=dict(color="white", size=11))
+            fig_curve.add_annotation(x=pred_low, y=0.1, text=f"%10 (Hızlı)<br>{pred_low:,.0f} TL", showarrow=True, arrowhead=1, ax=-30, ay=20, font=dict(color="#EF4444", size=10))
+            fig_curve.add_annotation(x=pred_high, y=0.1, text=f"%90 (Tavan)<br>{pred_high:,.0f} TL", showarrow=True, arrowhead=1, ax=30, ay=20, font=dict(color="#10B981", size=10))
+
+            fig_curve.update_layout(
+                title=dict(text="<b>Fiyat Dağılımı Aralığı (Probability Distribution)</b>", font=dict(size=14, color="#F8FAFC")),
+                template="plotly_dark",
+                paper_bgcolor="#111827",
+                plot_bgcolor="#111827",
+                height=240,
+                margin=dict(l=20, r=20, t=40, b=20),
+                xaxis=dict(showticklabels=False, showgrid=False),
+                yaxis=dict(showticklabels=False, showgrid=False)
+            )
+            st.plotly_chart(fig_curve, use_container_width=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Bölüm 3: Yatırım ve Amortisman Analizi
+        st.markdown("#### 📈 YATIRIM VE AMORTİSMAN ANALİZİ")
         y1, y2, y3 = st.columns(3)
-        y1.metric("Tahmini Aylık Kira Potansiyeli", f"{tahmini_aylik_kira:,.0f} TL/Ay")
+        y1.metric("Tahmini Aylık Kira Potansiyeli", f"{tahmini_aylik_kira:,.0f} TL / Ay")
         y2.metric("Amortisman Süresi", f"{amortisman_yil:.1f} Yıl")
         y3.metric("Yıllık Brüt Getiri Oranı", f"%{yillik_getiri_yuzde:.2f}")
 
-        rapor_metni = f"""GAYRİMENKUL DEĞERLEME VE YATIRIM RAPORU
-Tarih: {datetime.now().strftime('%d/%m/%Y %H:%M')}
-
+        # İndirme Butonu
+        st.markdown("<br>", unsafe_allow_html=True)
+        rapor_metni = f"""GAYRİMENKUL VE DEĞERLENDİRME ANALİZİ
+Tarih: {rapor_tarih} | {rapor_no}
+--------------------------------------------------
 1. TAŞINMAZ BİLGİLERİ
------------------------------------------
 Lokasyon: İstanbul / {s_ilce}
 Brüt Alan: {s_brut} m²
 Bina Yaşı: {s_bina_yasi} Yıl
 Oda Yapısı: {s_oda}+{s_salon}
 
 2. DEĞERLEME SONUÇLARI (CATBOOST REGRESSION)
------------------------------------------
 Tahmini Piyasa Satış Bedeli: {pred_mid:,.0f} TL
-Alt Bant (%10 Quantile / Hızlı Satış): {pred_low:,.0f} TL
-Üst Bant (%90 Quantile / Tavan Satış): {pred_high:,.0f} TL
+Alt Bant (%10 / Hızlı Satış): {pred_low:,.0f} TL
+Üst Bant (%90 / Tavan Satış): {pred_high:,.0f} TL
 
 3. YATIRIM VE AMORTİSMAN ANALİZİ
------------------------------------------
 Tahmini Aylık Kira Potansiyeli: {tahmini_aylik_kira:,.0f} TL / Ay
 Amortisman Süresi: {amortisman_yil:.1f} Yıl
 Yıllık Brüt Getiri Oranı: %{yillik_getiri_yuzde:.2f}
+--------------------------------------------------
+Bu rapor mevcut veriler ve yapay zeka destekli analizler doğrultusunda hazırlanmıştır.
 """
-        st.download_button("Değerleme Raporunu Metin Dosyası Olarak İndir", data=rapor_metni, file_name=f"Gayrimenkul_Degerleme_Raporu_{s_ilce}_{datetime.now().strftime('%Y%m%d')}.txt", mime="text/plain")
+        st.download_button("📥 Bu Görsel Raporu Metin Olarak İndir", data=rapor_metni, file_name=f"Gayrimenkul_Gorsel_Rapor_{s_ilce}_{datetime.now().strftime('%Y%m%d')}.txt", mime="text/plain")
 
 # =========================================================
 # MODÜL 3: COĞRAFİ HARİTA ANALİZİ
@@ -589,7 +667,7 @@ elif menu_secim == "Coğrafi Harita Analizi":
         hm3.metric("Bölge Ortalama m² Birim Fiyatı", f"{map_filtered['fiyat_m2'].mean():,.0f} TL")
 
 # =========================================================
-# MODÜL 4: KONUT KREDİSİ SİMÜLASYONU (MANÜEL VEYA BANKA ORANI)
+# MODÜL 4: KONUT KREDİSİ SİMÜLASYONU
 # =========================================================
 elif menu_secim == "Konut Kredisi Simülasyonu":
     st.title("Konut Kredisi Hesaplama Modülü")
