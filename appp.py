@@ -193,6 +193,197 @@ try:
 except Exception as e:
     st.error(f"Veri yükleme hatası: {e}")
     st.stop()
+    from weasyprint import HTML
+from io import BytesIO
+import base64
+
+def generate_valuation_pdf(
+    lokasyon, brut_alan, bina_yasi, oda_yapisi,
+    pred_mid, pred_low, pred_high,
+    tahmini_kira, amortisman_yil, yillik_getiri,
+    rapor_tarih, rapor_no
+):
+    """Görseldeki tasarıma çok yakın PDF raporu üretir."""
+    
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            @page {{ size: A4; margin: 0; }}
+            body {{
+                font-family: 'Segoe UI', Arial, sans-serif;
+                margin: 0; padding: 0;
+                background: #ffffff;
+                color: #1e293b;
+            }}
+            .header {{
+                background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%);
+                color: white;
+                padding: 28px 40px 20px 40px;
+                position: relative;
+                overflow: hidden;
+            }}
+            .header::after {{
+                content: '';
+                position: absolute;
+                top: 0; right: 0;
+                width: 45%; height: 100%;
+                background: url('https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800') center/cover;
+                opacity: 0.85;
+                border-radius: 0 0 0 80px;
+            }}
+            .logo-title {{
+                position: relative; z-index: 2;
+            }}
+            .logo-title h1 {{
+                margin: 0; font-size: 26px; font-weight: 700;
+                letter-spacing: 0.5px;
+            }}
+            .logo-title p {{
+                margin: 6px 0 0 0; font-size: 13px; opacity: 0.9;
+            }}
+            .meta {{
+                position: absolute; top: 28px; right: 40px;
+                text-align: right; font-size: 12px; z-index: 2;
+                background: rgba(15,23,42,0.7); padding: 8px 14px; border-radius: 8px;
+            }}
+            .section {{
+                padding: 22px 40px;
+            }}
+            .section-title {{
+                display: flex; align-items: center; gap: 10px;
+                font-size: 15px; font-weight: 700; color: #0f172a;
+                margin-bottom: 16px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;
+            }}
+            .info-grid {{
+                display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+            }}
+            .info-card {{
+                background: #f8fafc; border: 1px solid #e2e8f0;
+                border-radius: 12px; padding: 16px; text-align: center;
+            }}
+            .info-card .label {{ font-size: 12px; color: #64748b; margin-bottom: 4px; }}
+            .info-card .value {{ font-size: 18px; font-weight: 700; color: #0f172a; }}
+            
+            .value-box {{
+                background: linear-gradient(135deg, #1e3a5f, #0f172a);
+                color: white; border-radius: 16px; padding: 24px;
+                text-align: center; margin-bottom: 16px;
+            }}
+            .value-box .label {{ font-size: 13px; opacity: 0.85; }}
+            .value-box .amount {{ font-size: 32px; font-weight: 800; margin: 8px 0; }}
+            
+            .bands {{
+                display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+            }}
+            .band {{
+                border-radius: 12px; padding: 14px; text-align: center;
+            }}
+            .band.high {{ background: #ecfdf5; border: 1px solid #10b981; color: #065f46; }}
+            .band.low  {{ background: #fef2f2; border: 1px solid #ef4444; color: #991b1b; }}
+            .band .label {{ font-size: 11px; font-weight: 600; }}
+            .band .amount {{ font-size: 18px; font-weight: 700; margin-top: 4px; }}
+            
+            .invest-grid {{
+                display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+            }}
+            .invest-card {{
+                background: #f8fafc; border: 1px solid #e2e8f0;
+                border-radius: 12px; padding: 18px; text-align: center;
+            }}
+            .invest-card .label {{ font-size: 12px; color: #64748b; }}
+            .invest-card .value {{ font-size: 20px; font-weight: 700; color: #0f172a; margin-top: 6px; }}
+            
+            .footer {{
+                background: #0f172a; color: #94a3b8;
+                padding: 16px 40px; font-size: 11px; text-align: center;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <div class="logo-title">
+                <h1>GAYRİMENKUL VE<br>DEĞERLENDİRME ANALİZİ</h1>
+                <p>Değer Analizi ile Doğru Yatırım Kararları</p>
+            </div>
+            <div class="meta">
+                📅 Tarih: {rapor_tarih}<br>
+                📄 Rapor No: {rapor_no}
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">🏠 TAŞINMAZ BİLGİLERİ</div>
+            <div class="info-grid">
+                <div class="info-card">
+                    <div class="label">Lokasyon</div>
+                    <div class="value">{lokasyon}</div>
+                </div>
+                <div class="info-card">
+                    <div class="label">Brüt Alan</div>
+                    <div class="value">{brut_alan} m²</div>
+                </div>
+                <div class="info-card">
+                    <div class="label">Bina Yaşı</div>
+                    <div class="value">{bina_yasi} Yıl</div>
+                </div>
+                <div class="info-card">
+                    <div class="label">Oda Yapısı</div>
+                    <div class="value">{oda_yapisi}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section" style="padding-top:0;">
+            <div class="section-title">⚖️ DEĞERLEME SONUÇLARI (CATBOOST REGRESSION)</div>
+            
+            <div class="value-box">
+                <div class="label">Tahmini Piyasa Satış Bedeli</div>
+                <div class="amount">{pred_mid:,.0f} TL</div>
+            </div>
+            
+            <div class="bands">
+                <div class="band high">
+                    <div class="label">ÜST BANT (%90 Quantile / Tavan Satış)</div>
+                    <div class="amount">{pred_high:,.0f} TL</div>
+                </div>
+                <div class="band low">
+                    <div class="label">ALT BANT (%10 Quantile / Hızlı Satış)</div>
+                    <div class="amount">{pred_low:,.0f} TL</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section" style="padding-top:0;">
+            <div class="section-title">📈 YATIRIM VE AMORTİSMAN ANALİZİ</div>
+            <div class="invest-grid">
+                <div class="invest-card">
+                    <div class="label">Tahmini Aylık Kira Potansiyeli</div>
+                    <div class="value">{tahmini_kira:,.0f} TL / Ay</div>
+                </div>
+                <div class="invest-card">
+                    <div class="label">Amortisman Süresi</div>
+                    <div class="value">{amortisman_yil:.1f} Yıl</div>
+                </div>
+                <div class="invest-card">
+                    <div class="label">Yıllık Brüt Getiri Oranı</div>
+                    <div class="value">%{yillik_getiri:.2f}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            Bu rapor, mevcut veriler ve yapay zeka destekli analizler doğrultusunda hazırlanmıştır.<br>
+            Yatırım kararlarınızı almadan önce profesyonel danışmanlık almanız önerilir.
+        </div>
+    </body>
+    </html>
+    """
+    
+    pdf_bytes = HTML(string=html_content).write_pdf()
+    return pdf_bytes
 
 def mesafe_etiket(m):
     if m <= 800: return f"~{m} m (Çok Yakın)"
