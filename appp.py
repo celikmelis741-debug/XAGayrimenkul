@@ -176,10 +176,15 @@ def load_model_and_data():
     model_mid = CatBoostRegressor(iterations=600, learning_rate=0.05, depth=6, cat_features=['Semt'], verbose=0, random_seed=42)
     model_mid.fit(X_train, y_train)
 
-    model_low = CatBoostRegressor(iterations=600, learning_rate=0.05, depth=6, loss_function='Quantile:alpha=0.10', cat_features=['Semt'], verbose=0, random_seed=42)
+    # Daha dar quantile'lar (daha gerçekçi bantlar)
+    model_low = CatBoostRegressor(iterations=600, learning_rate=0.05, depth=6, 
+                                  loss_function='Quantile:alpha=0.25', 
+                                  cat_features=['Semt'], verbose=0, random_seed=42)
     model_low.fit(X_train, y_train)
 
-    model_high = CatBoostRegressor(iterations=600, learning_rate=0.05, depth=6, loss_function='Quantile:alpha=0.90', cat_features=['Semt'], verbose=0, random_seed=42)
+    model_high = CatBoostRegressor(iterations=600, learning_rate=0.05, depth=6, 
+                                   loss_function='Quantile:alpha=0.75', 
+                                   cat_features=['Semt'], verbose=0, random_seed=42)
     model_high.fit(X_train, y_train)
 
     y_pred = np.expm1(model_mid.predict(X_test))
@@ -323,7 +328,7 @@ def generate_valuation_pdf(
     pdf.set_text_color(6, 95, 70)
     pdf.set_font('Helvetica', '', 8)
     pdf.set_xy(14, 149)
-    pdf.cell(88, 5, 'UST BANT (%90 Quantile / Tavan Satis)', 0, 1, 'C')
+    pdf.cell(88, 5, 'UST BANT (%75 Quantile / Tavan Satis)', 0, 1, 'C')
     pdf.set_font('Helvetica', 'B', 13)
     pdf.set_xy(14, 157)
     pdf.cell(88, 8, f'{pred_high:,.0f} TL', 0, 1, 'C')
@@ -335,7 +340,7 @@ def generate_valuation_pdf(
     pdf.set_text_color(153, 27, 27)
     pdf.set_font('Helvetica', '', 8)
     pdf.set_xy(108, 149)
-    pdf.cell(88, 5, 'ALT BANT (%10 Quantile / Hizli Satis)', 0, 1, 'C')
+    pdf.cell(88, 5, 'ALT BANT (%25 Quantile / Hizli Satis)', 0, 1, 'C')
     pdf.set_font('Helvetica', 'B', 13)
     pdf.set_xy(108, 157)
     pdf.cell(88, 8, f'{pred_low:,.0f} TL', 0, 1, 'C')
@@ -659,6 +664,16 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
         pred_low *= multiplier
         pred_high *= multiplier
 
+        # ========== BANTLARI DAHA GERÇEKÇİ HALE GETİR ==========
+        max_spread = 0.35   # ± %35
+        pred_low = max(pred_low, pred_mid * (1 - max_spread))
+        pred_high = min(pred_high, pred_mid * (1 + max_spread))
+
+        if pred_low > pred_high:
+            pred_low = pred_mid * 0.85
+            pred_high = pred_mid * 1.15
+        # ========================================================
+
         tahmini_aylik_kira = pred_mid / 220
         amortisman_yil = pred_mid / (tahmini_aylik_kira * 12)
         yillik_getiri_yuzde = ((tahmini_aylik_kira * 12) / pred_mid) * 100
@@ -706,13 +721,13 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
             
             d_alt, d_ust = st.columns(2)
             with d_alt:
-                st.metric("ALT BANT (%10)", f"{pred_low:,.0f} TL")
+                st.metric("ALT BANT (%25)", f"{pred_low:,.0f} TL")
             with d_ust:
-                st.metric("ÜST BANT (%90)", f"{pred_high:,.0f} TL")
+                st.metric("ÜST BANT (%75)", f"{pred_high:,.0f} TL")
 
         with dg2:
-            x_vals = np.linspace(pred_low * 0.7, pred_high * 1.3, 200)
-            y_vals = np.exp(-((x_vals - pred_mid) ** 2) / (2 * ((pred_high - pred_low) / 4) ** 2))
+            x_vals = np.linspace(pred_low * 0.85, pred_high * 1.15, 200)
+            y_vals = np.exp(-((x_vals - pred_mid) ** 2) / (2 * ((pred_high - pred_low) / 3.5) ** 2))
             
             fig_curve = go.Figure()
             fig_curve.add_trace(go.Scatter(
@@ -723,8 +738,8 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
             ))
             
             fig_curve.add_annotation(x=pred_mid, y=1.05, text=f"<b>Tahmini Değer</b><br>{pred_mid:,.0f} TL", showarrow=True, arrowhead=2, ax=0, ay=-35, font=dict(color="white", size=11))
-            fig_curve.add_annotation(x=pred_low, y=0.1, text=f"%10 (Hızlı)<br>{pred_low:,.0f} TL", showarrow=True, arrowhead=1, ax=-30, ay=20, font=dict(color="#EF4444", size=10))
-            fig_curve.add_annotation(x=pred_high, y=0.1, text=f"%90 (Tavan)<br>{pred_high:,.0f} TL", showarrow=True, arrowhead=1, ax=30, ay=20, font=dict(color="#10B981", size=10))
+            fig_curve.add_annotation(x=pred_low, y=0.15, text=f"%25<br>{pred_low:,.0f} TL", showarrow=True, arrowhead=1, ax=-25, ay=25, font=dict(color="#EF4444", size=10))
+            fig_curve.add_annotation(x=pred_high, y=0.15, text=f"%75<br>{pred_high:,.0f} TL", showarrow=True, arrowhead=1, ax=25, ay=25, font=dict(color="#10B981", size=10))
 
             fig_curve.update_layout(
                 title=dict(text="<b>Fiyat Dağılımı Aralığı</b>", font=dict(size=14, color="#F8FAFC")),
@@ -759,8 +774,8 @@ Oda Yapısı: {s_oda}+{s_salon}
 
 2. DEĞERLEME SONUÇLARI (CATBOOST REGRESSION)
 Tahmini Piyasa Satış Bedeli: {pred_mid:,.0f} TL
-Alt Bant (%10 / Hızlı Satış): {pred_low:,.0f} TL
-Üst Bant (%90 / Tavan Satış): {pred_high:,.0f} TL
+Alt Bant (%25 / Hızlı Satış): {pred_low:,.0f} TL
+Üst Bant (%75 / Tavan Satış): {pred_high:,.0f} TL
 
 3. YATIRIM VE AMORTİSMAN ANALİZİ
 Tahmini Aylık Kira Potansiyeli: {tahmini_aylik_kira:,.0f} TL / Ay
