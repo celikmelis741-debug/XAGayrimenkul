@@ -589,7 +589,7 @@ elif menu_secim == "Coğrafi Harita Analizi":
         hm3.metric("Bölge Ortalama m² Birim Fiyatı", f"{map_filtered['fiyat_m2'].mean():,.0f} TL")
 
 # =========================================================
-# MODÜL 4: KONUT KREDİSİ SİMÜLASYONU
+# MODÜL 4: KONUT KREDİSİ SİMÜLASYONU (GÜNÇEL BANKA ORANLARI)
 # =========================================================
 elif menu_secim == "Konut Kredisi Simülasyonu":
     st.title("Konut Kredisi Hesaplama Modülü")
@@ -598,13 +598,23 @@ elif menu_secim == "Konut Kredisi Simülasyonu":
     st.markdown("""
     <div class="content-card">
         <h4>Finansman ve Kredi Parametreleri</h4>
-        Alınacak konut bedeli, kullanılacak peşinat oranı ve tercih edilen aylık faiz oranını giriniz.
+        Alınacak konut bedeli, kullanılacak peşinat oranı ve tercih edilen banka/faiz oranını seçiniz.
     </div>
     """, unsafe_allow_html=True)
 
     banka_seçimi = st.selectbox(
-        "Banka Oran Referansı Seçiniz:",
-        ["Ziraat / Halkbank / Vakıfbank (Kamu) - %2.79", "Özel Banka Ortalaması - %2.89", "Özel Faiz Oranı Girişi"],
+        "Banka Seçiniz:",
+        [
+            "Ziraat Bankası (Kamu) - %2.79",
+            "VakıfBank (Kamu) - %2.79",
+            "Halkbank (Kamu) - %2.79",
+            "Akbank - %3.05",
+            "Garanti BBVA - %3.10",
+            "İş Bankası - %3.08",
+            "Yapı Kredi - %3.12",
+            "QNB Finansbank - %3.15",
+            "Özel Faiz Oranı Girişi"
+        ],
         key="banka_secim"
     )
 
@@ -614,14 +624,27 @@ elif menu_secim == "Konut Kredisi Simülasyonu":
         pesinat = st.slider("Özkaynak / Peşinat Oranı (%)", 10, 90, 20, 5, key="kredi_page_pesinat")
     with col2:
         vade = st.selectbox("Geri Ödeme Vadesi (Ay)", [36, 48, 60, 84, 120, 180, 240], index=4, key="kredi_page_vade")
+        
         if banka_seçimi == "Özel Faiz Oranı Girişi":
             faiz = st.number_input("Aylık Akdi Faiz Oranı (%)", 0.1, 10.0, 2.79, 0.01, key="kredi_page_faiz")
         elif "Kamu" in banka_seçimi:
             faiz = 2.79
             st.info("Kamu bankası referans aylık faiz oranı: %2.79")
-        else:
-            faiz = 2.89
-            st.info("Özel banka referans aylık faiz oranı: %2.89")
+        elif "Akbank" in banka_seçimi:
+            faiz = 3.05
+            st.info("Akbank güncel konut kredisi faiz oranı: %3.05")
+        elif "Garanti" in banka_seçimi:
+            faiz = 3.10
+            st.info("Garanti BBVA güncel konut kredisi faiz oranı: %3.10")
+        elif "İş Bankası" in banka_seçimi:
+            faiz = 3.08
+            st.info("İş Bankası güncel konut kredisi faiz oranı: %3.08")
+        elif "Yapı Kredi" in banka_seçimi:
+            faiz = 3.12
+            st.info("Yapı Kredi güncel konut kredisi faiz oranı: %3.12")
+        elif "QNB" in banka_seçimi:
+            faiz = 3.15
+            st.info("QNB Finansbank güncel konut kredisi faiz oranı: %3.15")
 
     pesinat_tutar = tutar * (pesinat / 100)
     kredi = tutar - pesinat_tutar
