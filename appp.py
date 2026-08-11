@@ -9,6 +9,13 @@ import plotly.graph_objects as go
 import re
 import os
 from datetime import datetime
+from io import BytesIO
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.utils import simpleSplit
 
 # =========================================================
 # 1. SAYFA AYARLARI VE KURUMSAL TEMA (CSS)
@@ -224,6 +231,346 @@ menu_secim = st.sidebar.radio(
 st.sidebar.markdown("---")
 
 # =========================================================
+# PROFESYONEL PDF RAPOR ŞABLONU
+# =========================================================
+def _register_pdf_fonts():
+    """Türkçe karakter destekli PDF fontlarını yükler."""
+    regular = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    bold = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    if os.path.exists(regular) and os.path.exists(bold):
+        try:
+            pdfmetrics.registerFont(TTFont("ReportSans", regular))
+            pdfmetrics.registerFont(TTFont("ReportSans-Bold", bold))
+            return "ReportSans", "ReportSans-Bold"
+        except Exception:
+            pass
+    return "Helvetica", "Helvetica-Bold"
+
+
+def _money(v):
+    return f"{v:,.0f} TL"
+
+
+def _draw_round_rect(c, x, y, w, h, fill, stroke=None, radius=12, sw=1):
+    c.setFillColor(fill)
+    c.setStrokeColor(stroke or fill)
+    c.setLineWidth(sw)
+    c.roundRect(x, y, w, h, radius, fill=1, stroke=1 if stroke else 0)
+
+
+def _draw_building_illustration(c, x, y, w, h, navy, gold):
+    """Rapor üst bölümünde fotoğraf yerine temiz bir vektörel bina görseli."""
+    c.saveState()
+    c.setFillColor(colors.HexColor("#EAF2FA"))
+    c.roundRect(x, y, w, h, 22, fill=1, stroke=0)
+
+    # Gökyüzü / zemin
+    c.setFillColor(colors.HexColor("#DCEAF7"))
+    c.rect(x, y + h * 0.48, w, h * 0.52, fill=1, stroke=0)
+    c.setFillColor(colors.HexColor("#D7E4D2"))
+    c.rect(x, y, w, h * 0.18, fill=1, stroke=0)
+
+    # Binalar
+    buildings = [
+        (0.10, 0.16, 0.25, 0.58),
+        (0.31, 0.10, 0.34, 0.73),
+        (0.60, 0.19, 0.25, 0.55),
+    ]
+    for bx, by, bw, bh in buildings:
+        c.setFillColor(colors.white)
+        c.setStrokeColor(colors.HexColor("#B8C7D6"))
+        c.roundRect(x + w*bx, y + h*by, w*bw, h*bh, 4, fill=1, stroke=1)
+        # kat çizgileri
+        c.setStrokeColor(colors.HexColor("#D4DEE8"))
+        for k in range(1, 5):
+            yy = y + h*by + h*bh*(k/5)
+            c.line(x + w*bx, yy, x + w*(bx+bw), yy)
+        # pencereler
+        c.setFillColor(colors.HexColor("#8FB6D8"))
+        for row in range(4):
+            for col in range(3):
+                ww = w*bw*0.13
+                hh = h*bh*0.055
+                px = x + w*bx + w*bw*(0.12 + col*0.29)
+                py = y + h*by + h*bh*(0.12 + row*0.18)
+                c.roundRect(px, py, ww, hh, 1.5, fill=1, stroke=0)
+
+    # Ön bina
+    c.setFillColor(colors.HexColor("#F8FBFE"))
+    c.setStrokeColor(navy)
+    c.setLineWidth(1.2)
+    c.roundRect(x + w*0.36, y + h*0.12, w*0.40, h*0.70, 5, fill=1, stroke=1)
+    c.setFillColor(colors.HexColor("#C5D8E8"))
+    for row in range(4):
+        for col in range(4):
+            px = x + w*0.40 + col*w*0.082
+            py = y + h*(0.21 + row*0.14)
+            c.roundRect(px, py, w*0.055, h*0.055, 1, fill=1, stroke=0)
+
+    # Altın vurgu çizgisi
+    c.setStrokeColor(gold)
+    c.setLineWidth(3)
+    c.line(x + w*0.06, y + h*0.08, x + w*0.94, y + h*0.08)
+    c.restoreState()
+
+
+def create_professional_real_estate_pdf(
+    rapor_tarih, rapor_no, s_ilce, s_brut, s_bina_yasi, s_oda, s_salon,
+    pred_mid, pred_low, pred_high, tahmini_aylik_kira,
+    amortisman_yil, yillik_getiri_yuzde
+):
+    """Seçilen taşınmaz için tek sayfalık, kurumsal A4 PDF raporu üretir."""
+    regular, bold = _register_pdf_fonts()
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    W, H = A4
+
+    navy = colors.HexColor("#0D2948")
+    navy2 = colors.HexColor("#173E67")
+    gold = colors.HexColor("#C79A45")
+    light = colors.HexColor("#F4F7FA")
+    line = colors.HexColor("#D9E1E8")
+    text = colors.HexColor("#172B40")
+    muted = colors.HexColor("#66788A")
+    green = colors.HexColor("#3D7A45")
+    red = colors.HexColor("#C94444")
+
+    # Arka plan
+    c.setFillColor(colors.white)
+    c.rect(0, 0, W, H, fill=1, stroke=0)
+
+    # Üst dekoratif şerit
+    c.setFillColor(navy)
+    c.rect(0, H-8, W, 8, fill=1, stroke=0)
+    c.setFillColor(gold)
+    c.rect(0, H-12, W*0.27, 4, fill=1, stroke=0)
+
+    # Logo / bina ikonu
+    logo_x, logo_y = 38, H-96
+    c.setStrokeColor(gold)
+    c.setLineWidth(2)
+    c.line(logo_x, logo_y, logo_x+58, logo_y)
+    c.line(logo_x+8, logo_y, logo_x+8, logo_y+42)
+    c.line(logo_x+8, logo_y+42, logo_x+23, logo_y+58)
+    c.line(logo_x+23, logo_y+58, logo_x+38, logo_y+42)
+    c.line(logo_x+38, logo_y+42, logo_x+38, logo_y+12)
+    c.line(logo_x+15, logo_y+5, logo_x+15, logo_y+30)
+    c.line(logo_x+30, logo_y+5, logo_x+30, logo_y+36)
+
+    # Başlık
+    c.setFillColor(navy)
+    c.setFont(bold, 23)
+    c.drawString(112, H-66, "GAYRİMENKUL VE")
+    c.drawString(112, H-94, "DEĞERLENDİRME ANALİZİ")
+    c.setFillColor(gold)
+    c.rect(112, H-108, 150, 3, fill=1, stroke=0)
+
+    # Meta alanı
+    meta_x = W-180
+    c.setStrokeColor(gold)
+    c.setLineWidth(1)
+    c.line(meta_x-15, H-52, meta_x-15, H-112)
+    c.setFillColor(muted)
+    c.setFont(bold, 7.5)
+    c.drawString(meta_x, H-58, "RAPOR TARİHİ")
+    c.setFillColor(text)
+    c.setFont(regular, 9)
+    c.drawString(meta_x, H-73, rapor_tarih)
+    c.setFillColor(muted)
+    c.setFont(bold, 7.5)
+    c.drawString(meta_x, H-91, "RAPOR NO")
+    c.setFillColor(text)
+    c.setFont(regular, 9)
+    c.drawString(meta_x, H-106, rapor_no.replace("Rapor No: ", ""))
+
+    # Giriş açıklaması + bina görseli
+    hero_y, hero_h = H-255, 115
+    c.setFillColor(colors.HexColor("#F8FAFC"))
+    c.roundRect(35, hero_y, W-70, hero_h, 18, fill=1, stroke=0)
+    c.setFillColor(gold)
+    c.rect(52, hero_y+78, 70, 3, fill=1, stroke=0)
+    c.setFillColor(navy)
+    c.setFont(bold, 13)
+    c.drawString(52, hero_y+57, "Değer Analizi ile")
+    c.drawString(52, hero_y+40, "Doğru Yatırım Kararları")
+    c.setFillColor(muted)
+    c.setFont(regular, 8.5)
+    desc = ("Bu rapor, taşınmazın mevcut piyasa koşulları doğrultusunda "
+            "tahmini değerini, yatırım potansiyelini ve getiri analizini "
+            "ortaya koymaktadır.")
+    ty = hero_y+22
+    for line_text in simpleSplit(desc, regular, 8.5, 245):
+        c.drawString(52, ty, line_text)
+        ty -= 11
+    _draw_building_illustration(c, W-350, hero_y+8, 315, 99, navy, gold)
+
+    # Bölüm başlığı yardımcı
+    def section_header(y, number, title):
+        c.setFillColor(navy)
+        c.roundRect(35, y, 100, 26, 9, fill=1, stroke=0)
+        c.setFillColor(colors.white)
+        c.setFont(bold, 11)
+        c.drawString(48, y+8, f"{number:02d}")
+        c.setFont(bold, 11)
+        c.drawString(148, y+8, title.upper())
+        c.setStrokeColor(line)
+        c.setLineWidth(1)
+        c.line(330, y+13, W-35, y+13)
+
+    # 01 Taşınmaz
+    section_y = H-285
+    section_header(section_y, 1, "Taşınmaz Bilgileri")
+    card_y, card_h = section_y-78, 63
+    _draw_round_rect(c, 35, card_y, W-70, card_h, colors.white, line, 10, 0.8)
+
+    items = [
+        ("LOKASYON", f"İstanbul / {s_ilce}"),
+        ("BRÜT ALAN", f"{s_brut} m²"),
+        ("BİNA YAŞI", f"{s_bina_yasi} Yıl"),
+        ("ODA YAPISI", f"{s_oda}+{s_salon}"),
+    ]
+    col_w = (W-70)/4
+    for i, (label, value) in enumerate(items):
+        x = 35 + i*col_w
+        if i:
+            c.setStrokeColor(line)
+            c.line(x, card_y+10, x, card_y+card_h-10)
+        c.setFillColor(navy)
+        c.circle(x+col_w/2, card_y+43, 9, fill=1, stroke=0)
+        c.setFillColor(colors.white)
+        c.setFont(bold, 7)
+        c.drawCentredString(x+col_w/2, card_y+40.5, "•")
+        c.setFillColor(muted)
+        c.setFont(bold, 6.5)
+        c.drawCentredString(x+col_w/2, card_y+24, label)
+        c.setFillColor(text)
+        c.setFont(bold, 8.5)
+        c.drawCentredString(x+col_w/2, card_y+10, value)
+
+    # 02 Değerleme
+    section_y2 = card_y-30
+    section_header(section_y2, 2, "Değerleme Sonuçları  (CatBoost Regression)")
+    box_y, box_h = section_y2-110, 94
+
+    # Ana değer
+    _draw_round_rect(c, 35, box_y, 160, box_h, navy, None, 10)
+    c.setFillColor(gold)
+    c.setFont(bold, 8)
+    c.drawString(50, box_y+68, "TAHMİNİ PİYASA")
+    c.drawString(50, box_y+56, "SATIŞ BEDELİ")
+    c.setFillColor(colors.white)
+    c.setFont(bold, 18)
+    c.drawString(50, box_y+27, _money(pred_mid))
+
+    # Alt/üst bantlar
+    _draw_round_rect(c, 207, box_y+49, 158, 45, colors.HexColor("#F8FBF7"), colors.HexColor("#C8DCCB"), 8, 0.8)
+    c.setFillColor(green)
+    c.setFont(bold, 7.5)
+    c.drawString(220, box_y+77, "ÜST BANT")
+    c.setFillColor(text)
+    c.setFont(regular, 6.5)
+    c.drawString(220, box_y+65, "(%90 Quantile / Tavan Satış)")
+    c.setFont(bold, 10)
+    c.drawString(220, box_y+53, _money(pred_high))
+
+    _draw_round_rect(c, 207, box_y, 158, 45, colors.HexColor("#FFF8F8"), colors.HexColor("#E6C4C4"), 8, 0.8)
+    c.setFillColor(red)
+    c.setFont(bold, 7.5)
+    c.drawString(220, box_y+28, "ALT BANT")
+    c.setFillColor(text)
+    c.setFont(regular, 6.5)
+    c.drawString(220, box_y+16, "(%10 Quantile / Hızlı Satış)")
+    c.setFont(bold, 10)
+    c.drawString(220, box_y+4, _money(pred_low))
+
+    # Dağılım grafiği
+    gx, gy, gw, gh = 390, box_y+10, W-425, 70
+    c.setFillColor(colors.HexColor("#FBFCFD"))
+    c.roundRect(gx-10, box_y, gw+20, box_h, 8, fill=1, stroke=0)
+    c.setFillColor(text)
+    c.setFont(bold, 7.5)
+    c.drawCentredString(gx+gw/2, box_y+78, "FİYAT DAĞILIM ARALIĞI")
+    c.setStrokeColor(navy)
+    c.setLineWidth(1.4)
+    # basit çan eğrisi
+    import math
+    pts=[]
+    for i in range(61):
+        t=i/60
+        xx=gx+t*gw
+        yy=gy+gh*math.exp(-((t-0.5)**2)/(2*0.18**2))
+        pts.append((xx,yy))
+    path=c.beginPath()
+    path.moveTo(*pts[0])
+    for xx,yy in pts[1:]:
+        path.lineTo(xx,yy)
+    c.drawPath(path, stroke=1, fill=0)
+    c.setStrokeColor(line)
+    c.line(gx+gw*0.25, gy, gx+gw*0.25, gy+gh*0.65)
+    c.line(gx+gw*0.50, gy, gx+gw*0.50, gy+gh)
+    c.line(gx+gw*0.75, gy, gx+gw*0.75, gy+gh*0.65)
+    c.setFillColor(red)
+    c.setFont(bold, 6)
+    c.drawCentredString(gx+gw*0.25, box_y+12, "%10")
+    c.setFillColor(text)
+    c.drawCentredString(gx+gw*0.50, box_y+12, "TAHMİNİ")
+    c.setFillColor(green)
+    c.drawCentredString(gx+gw*0.75, box_y+12, "%90")
+
+    # 03 Yatırım
+    section_y3 = box_y-30
+    section_header(section_y3, 3, "Yatırım ve Amortisman Analizi")
+    inv_y, inv_h = section_y3-75, 58
+    inv_gap=10
+    inv_w=(W-70-2*inv_gap)/3
+    invs=[
+        ("TAHMİNİ AYLIK KİRA POTANSİYELİ", f"{tahmini_aylik_kira:,.0f} TL / Ay"),
+        ("AMORTİSMAN SÜRESİ", f"{amortisman_yil:.1f} Yıl"),
+        ("YILLIK BRÜT GETİRİ ORANI", f"%{yillik_getiri_yuzde:.2f}")
+    ]
+    for i,(label,value) in enumerate(invs):
+        x=35+i*(inv_w+inv_gap)
+        _draw_round_rect(c,x,inv_y,inv_w,inv_h,colors.white,gold,8,0.7)
+        c.setFillColor(navy)
+        c.circle(x+22, inv_y+29, 10, fill=1, stroke=0)
+        c.setFillColor(colors.white)
+        c.setFont(bold, 8)
+        c.drawCentredString(x+22, inv_y+26, "%")
+        c.setFillColor(muted)
+        c.setFont(bold, 6.2)
+        lines=simpleSplit(label, bold, 6.2, inv_w-48)
+        yy=inv_y+38
+        for ll in lines[:2]:
+            c.drawString(x+38,yy,ll)
+            yy-=8
+        c.setFillColor(text)
+        c.setFont(bold, 11)
+        c.drawString(x+38,inv_y+9,value)
+
+    # Footer
+    footer_h=48
+    c.setFillColor(navy)
+    c.rect(0,0,W,footer_h,fill=1,stroke=0)
+    c.setFillColor(gold)
+    c.rect(0,footer_h-3,W*0.28,3,fill=1,stroke=0)
+    c.setFillColor(colors.white)
+    c.setFont(bold,7)
+    c.drawString(38,footer_h-18,"NOT VE UYARI")
+    c.setFont(regular,6.5)
+    footer=("Bu rapor mevcut veriler ve yapay zeka destekli analizler doğrultusunda hazırlanmıştır. "
+            "Yatırım kararları öncesinde profesyonel danışmanlık alınması önerilir.")
+    fy=footer_h-29
+    for ll in simpleSplit(footer,regular,6.5,W-76):
+        c.drawString(38,fy,ll)
+        fy-=9
+
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+# =========================================================
 # MODÜL 1: İLAN ARAMA VE FİLTRELEME
 # =========================================================
 if menu_secim == "İlan Arama ve Filtreleme":
@@ -420,6 +767,7 @@ if menu_secim == "İlan Arama ve Filtreleme":
             etiket_html = " ".join([f'<span class="ozellik-etiket">{o}</span>' for o in ozellikler])
             st.markdown(etiket_html, unsafe_allow_html=True)
 
+
 # =========================================================
 # MODÜL 2: GAYRİMENKUL DEĞERLEME MODÜLÜ (GÖRSEL DASHBOARD RAPORU)
 # =========================================================
@@ -585,30 +933,35 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
         y2.metric("Amortisman Süresi", f"{amortisman_yil:.1f} Yıl")
         y3.metric("Yıllık Brüt Getiri Oranı", f"%{yillik_getiri_yuzde:.2f}")
 
-        # İndirme Butonu
+        # =====================================================
+        # PROFESYONEL PDF RAPORU İNDİR
+        # =====================================================
         st.markdown("<br>", unsafe_allow_html=True)
-        rapor_metni = f"""GAYRİMENKUL VE DEĞERLENDİRME ANALİZİ
-Tarih: {rapor_tarih} | {rapor_no}
---------------------------------------------------
-1. TAŞINMAZ BİLGİLERİ
-Lokasyon: İstanbul / {s_ilce}
-Brüt Alan: {s_brut} m²
-Bina Yaşı: {s_bina_yasi} Yıl
-Oda Yapısı: {s_oda}+{s_salon}
 
-2. DEĞERLEME SONUÇLARI (CATBOOST REGRESSION)
-Tahmini Piyasa Satış Bedeli: {pred_mid:,.0f} TL
-Alt Bant (%10 / Hızlı Satış): {pred_low:,.0f} TL
-Üst Bant (%90 / Tavan Satış): {pred_high:,.0f} TL
+        pdf_data = create_professional_real_estate_pdf(
+            rapor_tarih=rapor_tarih,
+            rapor_no=rapor_no,
+            s_ilce=s_ilce,
+            s_brut=s_brut,
+            s_bina_yasi=s_bina_yasi,
+            s_oda=s_oda,
+            s_salon=s_salon,
+            pred_mid=pred_mid,
+            pred_low=pred_low,
+            pred_high=pred_high,
+            tahmini_aylik_kira=tahmini_aylik_kira,
+            amortisman_yil=amortisman_yil,
+            yillik_getiri_yuzde=yillik_getiri_yuzde
+        )
 
-3. YATIRIM VE AMORTİSMAN ANALİZİ
-Tahmini Aylık Kira Potansiyeli: {tahmini_aylik_kira:,.0f} TL / Ay
-Amortisman Süresi: {amortisman_yil:.1f} Yıl
-Yıllık Brüt Getiri Oranı: %{yillik_getiri_yuzde:.2f}
---------------------------------------------------
-Bu rapor mevcut veriler ve yapay zeka destekli analizler doğrultusunda hazırlanmıştır.
-"""
-        st.download_button("📥 Bu Görsel Raporu Metin Olarak İndir", data=rapor_metni, file_name=f"Gayrimenkul_Gorsel_Rapor_{s_ilce}_{datetime.now().strftime('%Y%m%d')}.txt", mime="text/plain")
+        st.download_button(
+            "📥 Profesyonel Raporu PDF Olarak İndir",
+            data=pdf_data,
+            file_name=f"Gayrimenkul_Degerlendirme_Analizi_{s_ilce}_{datetime.now().strftime('%Y%m%d')}.pdf",
+            mime="application/pdf",
+            type="primary",
+            use_container_width=True
+        )
 
 # =========================================================
 # MODÜL 3: COĞRAFİ HARİTA ANALİZİ
