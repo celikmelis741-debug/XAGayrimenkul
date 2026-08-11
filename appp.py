@@ -208,149 +208,170 @@ def has_ozellik(lst, aranan):
 # =========================================================
 # PDF RAPOR ÜRETME FONKSİYONU (fpdf2)
 # =========================================================
-def generate_valuation_pdf(
+ def generate_valuation_pdf(
     lokasyon, brut_alan, bina_yasi, oda_yapisi,
     pred_mid, pred_low, pred_high,
     tahmini_kira, amortisman_yil, yillik_getiri,
     rapor_tarih, rapor_no
 ):
+    # Türkçe karakterleri güvenli hale getir
+    def temizle(text):
+        if text is None:
+            return ""
+        text = str(text)
+        replacements = {
+            'ı': 'i', 'İ': 'I', 'ş': 's', 'Ş': 'S',
+            'ğ': 'g', 'Ğ': 'G', 'ü': 'u', 'Ü': 'U',
+            'ö': 'o', 'Ö': 'O', 'ç': 'c', 'Ç': 'C'
+        }
+        for tr, en in replacements.items():
+            text = text.replace(tr, en)
+        return text
+
+    lokasyon = temizle(lokasyon)
+    oda_yapisi = temizle(oda_yapisi)
+    rapor_tarih = temizle(rapor_tarih)
+    rapor_no = temizle(rapor_no)
+
     class PDF(FPDF):
         def header(self):
             pass
         def footer(self):
-            self.set_y(-15)
+            self.set_y(-12)
             self.set_font('Helvetica', 'I', 8)
-            self.set_text_color(100, 100, 100)
-            self.cell(0, 10, 'Bu rapor mevcut veriler ve yapay zeka destekli analizler dogrultusunda hazirlanmistir.', 0, 0, 'C')
+            self.set_text_color(120, 120, 120)
+            self.cell(0, 8, 'Bu rapor mevcut veriler ve yapay zeka destekli analizler dogrultusunda hazirlanmistir. Yatirim kararlarinizdan once profesyonel danismanlik aliniz.', 0, 0, 'C')
 
     pdf = PDF()
     pdf.add_page()
-    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.set_auto_page_break(auto=True, margin=12)
 
-    # Üst Başlık
+    # ========== ÜST BAŞLIK (Koyu mavi) ==========
     pdf.set_fill_color(15, 23, 42)
-    pdf.rect(0, 0, 210, 45, 'F')
-    
+    pdf.rect(0, 0, 210, 48, 'F')
+
     pdf.set_text_color(255, 255, 255)
-    pdf.set_font('Helvetica', 'B', 16)
-    pdf.set_xy(15, 12)
-    pdf.cell(0, 8, 'GAYRIMENKUL VE DEGERLENDIRME ANALIZI', 0, 1)
-    
+    pdf.set_font('Helvetica', 'B', 18)
+    pdf.set_xy(14, 12)
+    pdf.cell(0, 9, 'GAYRIMENKUL VE DEGERLENDIRME ANALIZI', 0, 1)
+
     pdf.set_font('Helvetica', '', 10)
-    pdf.set_xy(15, 24)
+    pdf.set_xy(14, 25)
     pdf.cell(0, 6, 'Deger Analizi ile Dogru Yatirim Kararlari', 0, 1)
 
     pdf.set_font('Helvetica', '', 9)
-    pdf.set_xy(130, 12)
-    pdf.cell(0, 6, f'Tarih: {rapor_tarih}', 0, 1)
-    pdf.set_xy(130, 18)
-    pdf.cell(0, 6, f'{rapor_no}', 0, 1)
+    pdf.set_xy(125, 14)
+    pdf.cell(0, 5, f'Tarih: {rapor_tarih}', 0, 1)
+    pdf.set_xy(125, 21)
+    pdf.cell(0, 5, f'{rapor_no}', 0, 1)
 
-    # Taşınmaz Bilgileri
+    # ========== TAŞINMAZ BİLGİLERİ ==========
     pdf.set_text_color(15, 23, 42)
     pdf.set_font('Helvetica', 'B', 12)
-    pdf.set_xy(15, 55)
-    pdf.cell(0, 8, 'TASINMAZ BILGILERI', 0, 1)
+    pdf.set_xy(14, 58)
+    pdf.cell(0, 7, 'TASINMAZ BILGILERI', 0, 1)
 
-    box_w = 42
-    box_h = 22
-    start_x = 15
-    y = 65
-
-    bilgiler = [
+    # 4 bilgi kartı
+    kartlar = [
         ("Lokasyon", lokasyon),
         ("Brut Alan", f"{brut_alan} m2"),
         ("Bina Yasi", f"{bina_yasi} Yil"),
         ("Oda Yapisi", oda_yapisi)
     ]
 
-    for i, (label, value) in enumerate(bilgiler):
-        x = start_x + i * (box_w + 5)
-        pdf.set_fill_color(248, 250, 252)
-        pdf.set_draw_color(200, 200, 200)
-        pdf.rect(x, y, box_w, box_h, 'DF')
-        
-        pdf.set_font('Helvetica', '', 8)
-        pdf.set_text_color(100, 100, 100)
-        pdf.set_xy(x + 2, y + 3)
-        pdf.cell(box_w - 4, 5, label, 0, 1, 'C')
-        
-        pdf.set_font('Helvetica', 'B', 10)
-        pdf.set_text_color(15, 23, 42)
-        pdf.set_xy(x + 2, y + 11)
-        pdf.cell(box_w - 4, 8, str(value)[:18], 0, 1, 'C')
+    kart_w = 44
+    kart_h = 24
+    baslangic_x = 14
+    y = 67
 
-    # Değerleme Sonuçları
+    for i, (baslik, deger) in enumerate(kartlar):
+        x = baslangic_x + i * (kart_w + 4)
+        pdf.set_fill_color(248, 250, 252)
+        pdf.set_draw_color(226, 232, 240)
+        pdf.rect(x, y, kart_w, kart_h, 'DF')
+
+        pdf.set_font('Helvetica', '', 8)
+        pdf.set_text_color(100, 116, 139)
+        pdf.set_xy(x, y + 4)
+        pdf.cell(kart_w, 5, baslik, 0, 1, 'C')
+
+        pdf.set_font('Helvetica', 'B', 11)
+        pdf.set_text_color(15, 23, 42)
+        pdf.set_xy(x, y + 12)
+        pdf.cell(kart_w, 7, str(deger)[:20], 0, 1, 'C')
+
+    # ========== DEĞERLEME SONUÇLARI ==========
     pdf.set_font('Helvetica', 'B', 12)
     pdf.set_text_color(15, 23, 42)
-    pdf.set_xy(15, 95)
-    pdf.cell(0, 8, 'DEGERLEME SONUCLARI (CATBOOST REGRESSION)', 0, 1)
+    pdf.set_xy(14, 100)
+    pdf.cell(0, 7, 'DEGERLEME SONUCLARI (CATBOOST REGRESSION)', 0, 1)
 
-    # Ana fiyat kutusu
+    # Ana fiyat kutusu (koyu)
     pdf.set_fill_color(30, 58, 95)
-    pdf.rect(15, 105, 180, 28, 'F')
-    
-    pdf.set_text_color(200, 220, 255)
-    pdf.set_font('Helvetica', '', 10)
-    pdf.set_xy(15, 108)
-    pdf.cell(180, 6, 'Tahmini Piyasa Satis Bedeli', 0, 1, 'C')
-    
-    pdf.set_text_color(255, 255, 255)
-    pdf.set_font('Helvetica', 'B', 18)
-    pdf.set_xy(15, 116)
-    pdf.cell(180, 12, f'{pred_mid:,.0f} TL', 0, 1, 'C')
+    pdf.rect(14, 110, 182, 30, 'F')
 
-    # Üst ve Alt Bant
+    pdf.set_text_color(147, 197, 253)
+    pdf.set_font('Helvetica', '', 10)
+    pdf.set_xy(14, 114)
+    pdf.cell(182, 6, 'Tahmini Piyasa Satis Bedeli', 0, 1, 'C')
+
+    pdf.set_text_color(255, 255, 255)
+    pdf.set_font('Helvetica', 'B', 20)
+    pdf.set_xy(14, 122)
+    pdf.cell(182, 12, f'{pred_mid:,.0f} TL', 0, 1, 'C')
+
+    # Üst Bant
     pdf.set_fill_color(236, 253, 245)
     pdf.set_draw_color(16, 185, 129)
-    pdf.rect(15, 138, 87, 22, 'DF')
+    pdf.rect(14, 146, 88, 24, 'DF')
     pdf.set_text_color(6, 95, 70)
     pdf.set_font('Helvetica', '', 8)
-    pdf.set_xy(15, 140)
-    pdf.cell(87, 5, 'UST BANT (%90 / Tavan Satis)', 0, 1, 'C')
-    pdf.set_font('Helvetica', 'B', 12)
-    pdf.set_xy(15, 147)
-    pdf.cell(87, 8, f'{pred_high:,.0f} TL', 0, 1, 'C')
+    pdf.set_xy(14, 149)
+    pdf.cell(88, 5, 'UST BANT (%90 Quantile / Tavan Satis)', 0, 1, 'C')
+    pdf.set_font('Helvetica', 'B', 13)
+    pdf.set_xy(14, 157)
+    pdf.cell(88, 8, f'{pred_high:,.0f} TL', 0, 1, 'C')
 
+    # Alt Bant
     pdf.set_fill_color(254, 242, 242)
     pdf.set_draw_color(239, 68, 68)
-    pdf.rect(108, 138, 87, 22, 'DF')
+    pdf.rect(108, 146, 88, 24, 'DF')
     pdf.set_text_color(153, 27, 27)
     pdf.set_font('Helvetica', '', 8)
-    pdf.set_xy(108, 140)
-    pdf.cell(87, 5, 'ALT BANT (%10 / Hizli Satis)', 0, 1, 'C')
-    pdf.set_font('Helvetica', 'B', 12)
-    pdf.set_xy(108, 147)
-    pdf.cell(87, 8, f'{pred_low:,.0f} TL', 0, 1, 'C')
+    pdf.set_xy(108, 149)
+    pdf.cell(88, 5, 'ALT BANT (%10 Quantile / Hizli Satis)', 0, 1, 'C')
+    pdf.set_font('Helvetica', 'B', 13)
+    pdf.set_xy(108, 157)
+    pdf.cell(88, 8, f'{pred_low:,.0f} TL', 0, 1, 'C')
 
-    # Yatırım Analizi
+    # ========== YATIRIM ANALİZİ ==========
     pdf.set_font('Helvetica', 'B', 12)
     pdf.set_text_color(15, 23, 42)
-    pdf.set_xy(15, 170)
-    pdf.cell(0, 8, 'YATIRIM VE AMORTISMAN ANALIZI', 0, 1)
+    pdf.set_xy(14, 180)
+    pdf.cell(0, 7, 'YATIRIM VE AMORTISMAN ANALIZI', 0, 1)
 
-    yatirimlar = [
-        ("Tahmini Aylik Kira", f"{tahmini_kira:,.0f} TL/Ay"),
+    yatirim_kartlari = [
+        ("Tahmini Aylik Kira", f"{tahmini_kira:,.0f} TL / Ay"),
         ("Amortisman Suresi", f"{amortisman_yil:.1f} Yil"),
         ("Yillik Brut Getiri", f"%{yillik_getiri:.2f}")
     ]
 
-    box_w2 = 58
-    for i, (label, value) in enumerate(yatirimlar):
-        x = 15 + i * (box_w2 + 5)
+    kart_w2 = 58
+    for i, (baslik, deger) in enumerate(yatirim_kartlari):
+        x = 14 + i * (kart_w2 + 5)
         pdf.set_fill_color(248, 250, 252)
-        pdf.set_draw_color(200, 200, 200)
-        pdf.rect(x, 180, box_w2, 25, 'DF')
-        
+        pdf.set_draw_color(226, 232, 240)
+        pdf.rect(x, 190, kart_w2, 28, 'DF')
+
         pdf.set_font('Helvetica', '', 8)
-        pdf.set_text_color(100, 100, 100)
-        pdf.set_xy(x, 183)
-        pdf.cell(box_w2, 5, label, 0, 1, 'C')
-        
-        pdf.set_font('Helvetica', 'B', 11)
+        pdf.set_text_color(100, 116, 139)
+        pdf.set_xy(x, 194)
+        pdf.cell(kart_w2, 5, baslik, 0, 1, 'C')
+
+        pdf.set_font('Helvetica', 'B', 12)
         pdf.set_text_color(15, 23, 42)
-        pdf.set_xy(x, 191)
-        pdf.cell(box_w2, 8, value, 0, 1, 'C')
+        pdf.set_xy(x, 203)
+        pdf.cell(kart_w2, 8, deger, 0, 1, 'C')
 
     return bytes(pdf.output())
 
