@@ -776,7 +776,7 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
         y2.metric("Amortisman Süresi", f"{amortisman_yil:.1f} Yıl")
         y3.metric("Yıllık Brüt Getiri Oranı", f"%{yillik_getiri_yuzde:.2f}")
 
-        # İndirme Butonu
+        # İndirme Butonu (eski metin versiyonu)
         st.markdown("<br>", unsafe_allow_html=True)
         rapor_metni = f"""GAYRİMENKUL VE DEĞERLENDİRME ANALİZİ
 Tarih: {rapor_tarih} | {rapor_no}
@@ -800,6 +800,30 @@ Yıllık Brüt Getiri Oranı: %{yillik_getiri_yuzde:.2f}
 Bu rapor mevcut veriler ve yapay zeka destekli analizler doğrultusunda hazırlanmıştır.
 """
         st.download_button("📥 Bu Görsel Raporu Metin Olarak İndir", data=rapor_metni, file_name=f"Gayrimenkul_Gorsel_Rapor_{s_ilce}_{datetime.now().strftime('%Y%m%d')}.txt", mime="text/plain")
+
+        # ========== PROFESYONEL PDF RAPOR (YENİ EKLENEN KISIM) ==========
+        pdf_bytes = generate_valuation_pdf(
+            lokasyon=f"İstanbul / {s_ilce}",
+            brut_alan=s_brut,
+            bina_yasi=s_bina_yasi,
+            oda_yapisi=f"{s_oda}+{s_salon}",
+            pred_mid=pred_mid,
+            pred_low=pred_low,
+            pred_high=pred_high,
+            tahmini_kira=tahmini_aylik_kira,
+            amortisman_yil=amortisman_yil,
+            yillik_getiri=yillik_getiri_yuzde,
+            rapor_tarih=rapor_tarih,
+            rapor_no=rapor_no
+        )
+
+        st.download_button(
+            label="📥 Profesyonel PDF Raporu İndir (Görsel Tasarım)",
+            data=pdf_bytes,
+            file_name=f"Gayrimenkul_Degerleme_Raporu_{s_ilce}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )txt", mime="text/plain")
 
 # =========================================================
 # MODÜL 3: COĞRAFİ HARİTA ANALİZİ
