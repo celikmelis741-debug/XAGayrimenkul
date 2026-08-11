@@ -156,7 +156,7 @@ def load_model_and_data():
     link_col = next((col for col in df.columns if col.lower() in ['link', 'url', 'ilan_linki', 'ilan_url', 'sahibinden_link']), None)
     df['İlan Bağlantısı'] = df[link_col].astype(str) if link_col else "https://www.sahibinden.com"
 
-    # Sadece İstanbul Odaklı Sabitlenmiştir
+    # İl seçeneği aktif olarak sadece İstanbul
     df['İl'] = 'İstanbul'
 
     df['İlçe'] = df['İlçe'].fillna('Bilinmiyor').astype(str)
@@ -258,6 +258,7 @@ if menu_secim == "İlan Arama ve Filtreleme":
 
     with st.expander("Filtreleri Göster / Gizle", expanded=False):
         if st.button("Filtre Seçimlerini Sıfırla"):
+            st.session_state["f_il"] = "İstanbul"
             st.session_state["f_ilce"] = "Tüm İlçeler"
             st.session_state["f_mahalle"] = "Tüm Mahalleler"
             st.session_state["f_oda"] = "Tümü"
@@ -276,19 +277,24 @@ if menu_secim == "İlan Arama ve Filtreleme":
             st.session_state["c_ebeveyn"] = False
             st.session_state["c_dubleks"] = False
             st.session_state["c_bahce"] = False
+            st.session_state["c_guvenlik"] = False
             st.session_state["c_sifir"] = False
             st.rerun()
 
         f_col1, f_col2, f_col3 = st.columns(3)
         with f_col1:
-            st.markdown("##### Lokasyon Parametreleri (İstanbul)")
+            st.markdown("##### Lokasyon Parametreleri")
+            # İl seçeneği sadece İstanbul olarak sabit ve görünen kutu şeklinde
+            selected_il = st.selectbox("İl", ["İstanbul"], key="f_il")
+            
             ilce_list = ["Tüm İlçeler"] + sorted(df['İlçe'].unique().tolist())
             selected_ilce = st.selectbox("İlçe", ilce_list, key="f_ilce")
             
             if selected_ilce == "Tüm İlçeler":
                 mahalle_list = ["Tüm Mahalleler"] + sorted(df['Mahalle'].unique().tolist())
             else:
-                mahalle_list = ["Tüm Mahalleler"] + sorted(df[df['İlçe'] == selected_ilce]['Mahalle'].unique().tolist())
+                mahalle_options = sorted(df[df['İlçe'] == selected_ilce]['Mahalle'].unique().tolist())
+                mahalle_list = ["Tüm Mahalleler"] + mahalle_options if len(mahalle_options) > 0 else ["Kayıtlı Mahalle Yok"]
 
             selected_mahalle = st.selectbox("Mahalle", mahalle_list, key="f_mahalle")
 
@@ -314,7 +320,7 @@ if menu_secim == "İlan Arama ve Filtreleme":
         with d2:
             f_kentsel = st.checkbox("Kentsel Dönüşüm / Güçlendirilmiş / Hasarsız", key="c_kentsel")
 
-        st.markdown("##### Bina ve Konut Donatıları")
+        st.markdown("##### Bina dan Konut Donatıları")
         o1, o2, o3, o4 = st.columns(4)
         with o1:
             f_site = st.checkbox("Site Yerleşimi", key="c_site")
@@ -435,6 +441,22 @@ if menu_secim == "İlan Arama ve Filtreleme":
             etiket_html = " ".join([f'<span class="ozellik-etiket">{o}</span>' for o in ozellikler])
             st.markdown(etiket_html, unsafe_allow_html=True)
 
+        st.divider()
+        st.markdown("### İlan Karşılaştırma Modülü")
+        st.caption("Karşılaştırmak istediğiniz kayıtları listeden seçiniz.")
+        secilen_ilanlar = st.multiselect("Seçilen İlanlar:", options=show_df['İlan Başlığı'].tolist(), max_selections=3)
+        if len(secilen_ilanlar) >= 2:
+            cols = st.columns(len(secilen_ilanlar))
+            for idx, baslik in enumerate(secilen_ilanlar):
+                k_row = show_df[show_df['İlan Başlığı'] == baslik].iloc[0]
+                with cols[idx]:
+                    st.markdown(f"#### İlan {idx+1}")
+                    st.write(f"**{k_row['İlan Başlığı'][:35]}...**")
+                    st.metric("Satış Bedeli", f"{k_row['Fiyat']:,.0f} TL")
+                    st.metric("Bina Yaşı", f"{k_row['bina_yasi']} Yıl")
+                    st.metric("Birim Fiyat", f"{k_row['fiyat_m2']:,.0f} TL/m²")
+                    st.write(f"**Konum:** {k_row['İlçe']} / {k_row['Mahalle']}")
+
 # =========================================================
 # MODÜL 2: GAYRİMENKUL DEĞERLEME MODÜLÜ
 # =========================================================
@@ -451,6 +473,7 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
 
     c_deg1, c_deg2, c_deg3 = st.columns(3)
     with c_deg1:
+        st.selectbox("İl", ["İstanbul"], key="val_il_sabit")
         s_ilce_options = sorted(df['İlçe'].unique().tolist())
         s_ilce = st.selectbox("İlçe", s_ilce_options, key="val_ilce")
     with c_deg2:
