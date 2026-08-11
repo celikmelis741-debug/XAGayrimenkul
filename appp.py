@@ -9,6 +9,8 @@ import plotly.graph_objects as go
 import re
 import os
 from datetime import datetime
+from weasyprint import HTML
+from io import BytesIO
 
 # =========================================================
 # 1. SAYFA AYARLARI VE KURUMSAL TEMA (CSS)
@@ -193,18 +195,25 @@ try:
 except Exception as e:
     st.error(f"Veri yükleme hatası: {e}")
     st.stop()
-    from weasyprint import HTML
-from io import BytesIO
-import base64
 
+def mesafe_etiket(m):
+    if m <= 800: return f"~{m} m (Çok Yakın)"
+    if m <= 1500: return f"~{m} m (Yakın)"
+    if m <= 3000: return f"~{m} m (Orta Mesafede)"
+    return f"~{m} m (Uzak)"
+
+def has_ozellik(lst, aranan):
+    return any(aranan.lower() in o.lower() for o in lst)
+
+# =========================================================
+# PDF RAPOR ÜRETME FONKSİYONU
+# =========================================================
 def generate_valuation_pdf(
     lokasyon, brut_alan, bina_yasi, oda_yapisi,
     pred_mid, pred_low, pred_high,
     tahmini_kira, amortisman_yil, yillik_getiri,
     rapor_tarih, rapor_no
 ):
-    """Görseldeki tasarıma çok yakın PDF raporu üretir."""
-    
     html_content = f"""
     <!DOCTYPE html>
     <html>
@@ -381,18 +390,8 @@ def generate_valuation_pdf(
     </body>
     </html>
     """
-    
     pdf_bytes = HTML(string=html_content).write_pdf()
     return pdf_bytes
-
-def mesafe_etiket(m):
-    if m <= 800: return f"~{m} m (Çok Yakın)"
-    if m <= 1500: return f"~{m} m (Yakın)"
-    if m <= 3000: return f"~{m} m (Orta Mesafede)"
-    return f"~{m} m (Uzak)"
-
-def has_ozellik(lst, aranan):
-    return any(aranan.lower() in o.lower() for o in lst)
 
 # =========================================================
 # 3. KONTROL PANELİ / SOL MENÜ
@@ -612,7 +611,7 @@ if menu_secim == "İlan Arama ve Filtreleme":
             st.markdown(etiket_html, unsafe_allow_html=True)
 
 # =========================================================
-# MODÜL 2: GAYRİMENKUL DEĞERLEME MODÜLÜ (GÖRSEL DASHBOARD RAPORU)
+# MODÜL 2: GAYRİMENKUL DEĞERLEME MODÜLÜ
 # =========================================================
 elif menu_secim == "Gayrimenkul Değerleme Modülü":
     st.title("Otomatik Gayrimenkul Değerleme Paneli")
@@ -738,7 +737,6 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
                 st.metric("ÜST BANT (%90)", f"{pred_high:,.0f} TL")
 
         with dg2:
-            # Görseldeki Fiyat Dağılım Eğrisi Benzeri Grafik
             x_vals = np.linspace(pred_low * 0.7, pred_high * 1.3, 200)
             y_vals = np.exp(-((x_vals - pred_mid) ** 2) / (2 * ((pred_high - pred_low) / 4) ** 2))
             
@@ -750,7 +748,6 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
                 hoverinfo='skip'
             ))
             
-            # Kritik Noktalar
             fig_curve.add_annotation(x=pred_mid, y=1.05, text=f"<b>Tahmini Değer</b><br>{pred_mid:,.0f} TL", showarrow=True, arrowhead=2, ax=0, ay=-35, font=dict(color="white", size=11))
             fig_curve.add_annotation(x=pred_low, y=0.1, text=f"%10 (Hızlı)<br>{pred_low:,.0f} TL", showarrow=True, arrowhead=1, ax=-30, ay=20, font=dict(color="#EF4444", size=10))
             fig_curve.add_annotation(x=pred_high, y=0.1, text=f"%90 (Tavan)<br>{pred_high:,.0f} TL", showarrow=True, arrowhead=1, ax=30, ay=20, font=dict(color="#10B981", size=10))
@@ -776,7 +773,7 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
         y2.metric("Amortisman Süresi", f"{amortisman_yil:.1f} Yıl")
         y3.metric("Yıllık Brüt Getiri Oranı", f"%{yillik_getiri_yuzde:.2f}")
 
-        # İndirme Butonu (eski metin versiyonu)
+        # TXT İndirme
         st.markdown("<br>", unsafe_allow_html=True)
         rapor_metni = f"""GAYRİMENKUL VE DEĞERLENDİRME ANALİZİ
 Tarih: {rapor_tarih} | {rapor_no}
@@ -799,9 +796,14 @@ Yıllık Brüt Getiri Oranı: %{yillik_getiri_yuzde:.2f}
 --------------------------------------------------
 Bu rapor mevcut veriler ve yapay zeka destekli analizler doğrultusunda hazırlanmıştır.
 """
-        st.download_button("📥 Bu Görsel Raporu Metin Olarak İndir", data=rapor_metni, file_name=f"Gayrimenkul_Gorsel_Rapor_{s_ilce}_{datetime.now().strftime('%Y%m%d')}.txt", mime="text/plain")
+        st.download_button(
+            label="📥 Bu Görsel Raporu Metin Olarak İndir",
+            data=rapor_metni,
+            file_name=f"Gayrimenkul_Gorsel_Rapor_{s_ilce}_{datetime.now().strftime('%Y%m%d')}.txt",
+            mime="text/plain"
+        )
 
-        # ========== PROFESYONEL PDF RAPOR (YENİ EKLENEN KISIM) ==========
+        # ========== PROFESYONEL PDF RAPOR ==========
         pdf_bytes = generate_valuation_pdf(
             lokasyon=f"İstanbul / {s_ilce}",
             brut_alan=s_brut,
@@ -823,7 +825,7 @@ Bu rapor mevcut veriler ve yapay zeka destekli analizler doğrultusunda hazırla
             file_name=f"Gayrimenkul_Degerleme_Raporu_{s_ilce}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
             mime="application/pdf",
             use_container_width=True
-        )txt", mime="text/plain")
+        )
 
 # =========================================================
 # MODÜL 3: COĞRAFİ HARİTA ANALİZİ
