@@ -12,7 +12,7 @@ from datetime import datetime
 from fpdf import FPDF
 
 # =========================================================
-# SAYFA AYARLARI + AÇIK TEMA CSS
+# SAYFA AYARLARI + ŞIK AÇIK TEMA
 # =========================================================
 st.set_page_config(
     page_title="Gayrimenkul Değerleme Platformu",
@@ -22,69 +22,86 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    /* Genel Arka Plan */
+    /* Genel */
     .stApp {
-        background-color: #F5F7FA;
-        color: #1E293B;
+        background-color: #F8FAFC;
+        color: #0F172A;
+        font-family: 'Inter', 'Segoe UI', sans-serif;
     }
 
     /* Başlıklar */
-    h1, h2, h3, h4 {
+    h1 {
         color: #0F172A !important;
         font-weight: 700 !important;
+        letter-spacing: -0.5px;
+    }
+    h2, h3, h4 {
+        color: #1E293B !important;
+        font-weight: 600 !important;
     }
 
     /* Sidebar */
     section[data-testid="stSidebar"] {
         background-color: #FFFFFF;
         border-right: 1px solid #E2E8F0;
+        box-shadow: 4px 0 24px rgba(0,0,0,0.03);
     }
-    section[data-testid="stSidebar"] * {
-        color: #1E293B !important;
+    section[data-testid="stSidebar"] .stRadio label {
+        font-weight: 500 !important;
+        padding: 8px 12px !important;
+        border-radius: 8px !important;
     }
 
     /* Metric Kartları */
     div[data-testid="stMetric"] {
         background: #FFFFFF;
         border: 1px solid #E2E8F0;
-        border-radius: 12px;
-        padding: 18px 20px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        border-radius: 16px;
+        padding: 20px 22px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+        transition: all 0.2s ease;
+    }
+    div[data-testid="stMetric"]:hover {
+        box-shadow: 0 8px 24px rgba(37, 99, 235, 0.08);
+        border-color: #BFDBFE;
     }
     div[data-testid="stMetric"] label {
         color: #64748B !important;
-        font-size: 0.85rem !important;
+        font-size: 0.8rem !important;
         font-weight: 500 !important;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
     }
     div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
         color: #0F172A !important;
         font-weight: 700 !important;
-        font-size: 1.4rem !important;
+        font-size: 1.5rem !important;
     }
 
-    /* Butonlar */
+    /* Ana Buton */
     .stButton > button {
-        background-color: #2563EB;
-        color: white;
-        border-radius: 8px;
+        background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+        color: white !important;
         border: none;
+        border-radius: 10px;
         font-weight: 600;
-        padding: 0.6rem 1.2rem;
-        transition: all 0.2s;
+        padding: 0.7rem 1.4rem;
+        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
+        transition: all 0.25s ease;
     }
     .stButton > button:hover {
-        background-color: #1D4ED8;
-        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(37, 99, 235, 0.35);
     }
 
-    /* Kartlar */
+    /* İçerik Kartları */
     .content-card {
-        background-color: #FFFFFF;
+        background: #FFFFFF;
         border: 1px solid #E2E8F0;
-        border-radius: 12px;
-        padding: 24px;
-        margin-bottom: 20px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        border-radius: 16px;
+        padding: 28px;
+        margin-bottom: 24px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.03);
     }
 
     /* Özellik Etiketleri */
@@ -92,31 +109,38 @@ st.markdown("""
         display: inline-block;
         background: #EFF6FF;
         color: #1D4ED8;
-        padding: 5px 12px;
+        padding: 6px 14px;
         border-radius: 20px;
-        font-size: 0.8rem;
-        margin: 3px 4px;
+        font-size: 0.78rem;
+        margin: 4px 4px;
         border: 1px solid #BFDBFE;
         font-weight: 500;
     }
 
-    /* Rapor Başlık Kutusu */
+    /* Rapor Başlık */
     .rapor-baslik-kutu {
         background: linear-gradient(135deg, #1E40AF 0%, #3B82F6 100%);
-        border-radius: 12px;
-        padding: 28px;
-        margin-bottom: 25px;
+        border-radius: 16px;
+        padding: 32px;
+        margin-bottom: 28px;
         color: white;
+        box-shadow: 0 10px 30px rgba(37, 99, 235, 0.2);
     }
 
     /* Input alanları */
-    .stSelectbox, .stNumberInput, .stTextInput {
-        background-color: white;
+    .stSelectbox > div > div,
+    .stNumberInput > div > div > input {
+        border-radius: 10px !important;
+        border: 1px solid #E2E8F0 !important;
     }
 
-    /* Genel yazı rengi */
-    p, span, label, div {
-        color: #334155;
+    p, label, span {
+        color: #475569;
+    }
+
+    hr {
+        border-color: #E2E8F0;
+        margin: 2rem 0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -401,7 +425,7 @@ st.sidebar.markdown("---")
 st.sidebar.info("Yapay zeka destekli gayrimenkul değerleme platformu")
 
 # =========================================================
-# MODÜL 1
+# MODÜL 1: İLAN ARAMA
 # =========================================================
 if menu_secim == "İlan Arama ve Filtreleme":
     st.title("Piyasa İlanları")
@@ -618,9 +642,9 @@ elif menu_secim == "Gayrimenkul Değer Hesaplama":
         col1, col2 = st.columns([1.1, 1.5])
         with col1:
             st.markdown(f"""
-            <div style="background: linear-gradient(135deg, #1E40AF, #3B82F6); border-radius: 12px; padding: 24px; text-align: center; color: white;">
+            <div style="background: linear-gradient(135deg, #1E40AF, #3B82F6); border-radius: 16px; padding: 28px; text-align: center; color: white; box-shadow: 0 10px 25px rgba(37,99,235,0.25);">
                 <div style="font-size: 0.9rem; opacity: 0.9;">Tahmini Satış Bedeli</div>
-                <div style="font-size: 2rem; font-weight: 800; margin: 8px 0;">{pred_mid:,.0f} TL</div>
+                <div style="font-size: 2.1rem; font-weight: 800; margin: 10px 0;">{pred_mid:,.0f} TL</div>
             </div>
             """, unsafe_allow_html=True)
             a1, a2 = st.columns(2)
@@ -637,7 +661,7 @@ elif menu_secim == "Gayrimenkul Değer Hesaplama":
             fig.update_layout(
                 title="Fiyat Dağılımı",
                 template="plotly_white",
-                height=240,
+                height=250,
                 margin=dict(l=20,r=20,t=40,b=20),
                 xaxis=dict(showticklabels=False, showgrid=False),
                 yaxis=dict(showticklabels=False, showgrid=False)
@@ -675,18 +699,38 @@ Kira: {tahmini_kira:,.0f} TL | Amortisman: {amortisman:.1f} yıl | Getiri: %{get
                                mime="application/pdf", use_container_width=True)
 
 # =========================================================
-# MODÜL 3-5 (Kısaltılmış - aynı mantık)
+# MODÜL 3: HARİTA
 # =========================================================
 elif menu_secim == "Coğrafi Harita Analizi":
     st.title("Coğrafi Harita Analizi")
     st.caption("İlanların konumsal dağılımı")
-    st.info("Harita modülü mevcut verilerle çalışmaktadır.")
+    st.info("Harita modülü mevcut verilerle çalışmaktadır. Detaylı harita görünümü için veri setinde koordinat bilgisi gerekmektedir.")
 
+# =========================================================
+# MODÜL 4: KREDİ
+# =========================================================
 elif menu_secim == "Konut Kredisi Simülasyonu":
     st.title("Konut Kredisi Simülasyonu")
     st.caption("Kredi ödeme planı hesaplama")
-    # (Önceki kredi kodu buraya eklenebilir)
 
+    col1, col2 = st.columns(2)
+    with col1:
+        tutar = st.number_input("Konut Bedeli (TL)", value=5_000_000.0, step=100000.0)
+        pesinat = st.slider("Peşinat Oranı (%)", 10, 90, 20)
+    with col2:
+        vade = st.selectbox("Vade (Ay)", [36, 48, 60, 84, 120, 180, 240], index=4)
+        faiz = st.number_input("Aylık Faiz (%)", 0.1, 10.0, 2.79, 0.01)
+
+    kredi = tutar * (1 - pesinat/100)
+    if kredi > 0:
+        r = faiz / 100
+        taksit = (kredi * r * (1+r)**vade) / ((1+r)**vade - 1)
+        st.metric("Aylık Taksit", f"{taksit:,.0f} TL")
+        st.metric("Toplam Geri Ödeme", f"{taksit*vade:,.0f} TL")
+
+# =========================================================
+# MODÜL 5: MODEL ANALİTİĞİ
+# =========================================================
 elif menu_secim == "Model ve Piyasa Analitiği":
     st.title("Model Performansı")
     st.caption("Kullanılan modellerin başarı karşılaştırması")
