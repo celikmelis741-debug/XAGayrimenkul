@@ -385,7 +385,7 @@ menu_secim = st.sidebar.radio(
     "Görüntülenecek Modülü Seçiniz:",
     [
         "İlan Arama ve Filtreleme",
-        "Gayrimenkul Değerleme Modülü",
+        "Gayrimenkul Değer Hesaplama",
         "Coğrafi Harita Analizi",
         "Konut Kredisi Simülasyonu",
         "Model ve Piyasa Analitiği"
@@ -593,16 +593,16 @@ if menu_secim == "İlan Arama ve Filtreleme":
             st.markdown(etiket_html, unsafe_allow_html=True)
 
 # =========================================================
-# MODÜL 2: GAYRİMENKUL DEĞERLEME MODÜLÜ
+# MODÜL 2: GAYRİMENKUL DEĞER HESAPLAMA
 # =========================================================
-elif menu_secim == "Gayrimenkul Değerleme Modülü":
-    st.title("Otomatik Gayrimenkul Değerleme Paneli")
-    st.caption("CatBoost makine öğrenmesi modeli ile taşınmazın tahmini satış değeri ve yatırım geri dönüş süresi hesaplanır.")
+elif menu_secim == "Gayrimenkul Değer Hesaplama":
+    st.title("Gayrimenkul Değer Hesaplama")
+    st.caption("CatBoost modeli ile taşınmazın tahmini satış değeri ve yatırım analizi.")
 
     st.markdown("""
     <div class="content-card">
-        <h4>Taşınmaz Parametre Girişi (İstanbul)</h4>
-        Değerlemesi yapılacak taşınmazın fiziksel ve konum bilgilerini giriniz.
+        <h4>Taşınmaz Bilgileri</h4>
+        Değerlemesi yapılacak taşınmazın bilgilerini giriniz.
     </div>
     """, unsafe_allow_html=True)
 
@@ -612,26 +612,26 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
         s_ilce_options = sorted(df['İlçe'].unique().tolist())
         s_ilce = st.selectbox("İlçe", s_ilce_options, key="val_ilce")
     with c_deg2:
-        s_brut = st.number_input("Brüt Kullanım Alanı (m²)", 30, 800, 120, key="val_brut")
+        s_brut = st.number_input("Brüt Alan (m²)", 30, 800, 120, key="val_brut")
         s_oda = st.selectbox("Oda Sayısı", [1, 2, 3, 4, 5, 6, 7, 8], index=2, key="val_oda")
         s_salon = st.selectbox("Salon Sayısı", [0, 1, 2], index=1, key="val_salon")
     with c_deg3:
         s_bina_yasi = st.number_input("Bina Yaşı (Yıl)", 0, 60, 5, key="val_yas")
 
-    st.markdown("##### Ek Yapı Nitelikleri")
+    st.markdown("##### Ek Özellikler")
     sc1, sc2, sc3 = st.columns(3)
     with sc1:
         s_deprem = st.checkbox("Deprem Yönetmeliğine Uygun", key="v_deprem")
         s_site = st.checkbox("Site İçerisinde", key="v_site")
     with sc2:
-        s_havuz = st.checkbox("Yüzme Havuzu Mevcut", key="v_havuz")
-        s_otopark = st.checkbox("Otopark Mevcut", key="v_otopark")
+        s_havuz = st.checkbox("Yüzme Havuzu", key="v_havuz")
+        s_otopark = st.checkbox("Otopark", key="v_otopark")
     with sc3:
-        s_ebeveyn = st.checkbox("Ebeveyn Banyosu Mevcut", key="v_ebeveyn")
+        s_ebeveyn = st.checkbox("Ebeveyn Banyosu", key="v_ebeveyn")
         s_sifir = st.checkbox("Sıfır / Yeni Yapı", key="v_sifir")
 
     st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("Değerleme Raporunu Hesapla", type="primary", use_container_width=True):
+    if st.button("Değeri Hesapla", type="primary", use_container_width=True):
         benzer = df[df['İlçe'] == s_ilce]['Semt'].mode()
         semt_degeri = benzer.iloc[0] if len(benzer) > 0 else s_ilce
 
@@ -663,65 +663,45 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
         pred_low *= multiplier
         pred_high *= multiplier
 
-        # ========== SENİN İSTEDİĞİN KONTROLLÜ ARALIK ==========
+        # Kontrollü aralık
         pred_low  = pred_mid - 1_800_000
         pred_high = pred_mid + 4_000_000
-
-        # Güvenlik: çok düşük fiyat olmasın
         if pred_low < pred_mid * 0.70:
             pred_low = pred_mid * 0.75
-        # ======================================================
 
         tahmini_aylik_kira = pred_mid / 220
         amortisman_yil = pred_mid / (tahmini_aylik_kira * 12)
         yillik_getiri_yuzde = ((tahmini_aylik_kira * 12) / pred_mid) * 100
 
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        rapor_no = f"Rapor No: SM-AI-{datetime.now().strftime('%Y%m%d')}-001"
+        rapor_no = f"SM-AI-{datetime.now().strftime('%Y%m%d')}-001"
         rapor_tarih = datetime.now().strftime('%d/%m/%Y %H:%M')
-        
-        st.markdown(f"""
-        <div class="rapor-baslik-kutu">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <h2 style="margin: 0; color: #F8FAFC; font-size: 1.8rem;">GAYRİMENKUL VE DEĞERLENDİRME ANALİZİ</h2>
-                    <p style="color: #94A3B8; margin: 5px 0 0 0; font-size: 0.95rem;">Değer Analizi ile Doğru Yatırım Kararları | Mevcut piyasa koşulları doğrultusunda analiz edilmiştir.</p>
-                </div>
-                <div style="text-align: right; color: #94A3B8; font-size: 0.85rem;">
-                    <div>📅 Tarih: {rapor_tarih}</div>
-                    <div>📄 {rapor_no}</div>
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
 
-        st.markdown("#### 🏠 TAŞINMAZ BİLGİLERİ")
+        # ========== SADE EKRAN GÖRÜNÜMÜ ==========
+        st.markdown("---")
+        
+        st.markdown("### Taşınmaz Bilgileri")
         b1, b2, b3, b4 = st.columns(4)
         b1.metric("Lokasyon", f"İstanbul / {s_ilce}")
         b2.metric("Brüt Alan", f"{s_brut} m²")
         b3.metric("Bina Yaşı", f"{s_bina_yasi} Yıl")
         b4.metric("Oda Yapısı", f"{s_oda}+{s_salon}")
 
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        st.markdown("#### ⚖️ DEĞERLEME SONUÇLARI (CATBOOST REGRESSION)")
+        st.markdown("### Değerleme Sonuçları")
         
         dg1, dg2 = st.columns([1.2, 1.8])
         with dg1:
             st.markdown(f"""
             <div style="background: linear-gradient(135deg, #1E3A5F 0%, #111827 100%); border: 1px solid #3B82F6; border-radius: 10px; padding: 25px; text-align: center; margin-bottom: 10px;">
-                <div style="color: #93C5FD; font-size: 0.95rem; font-weight: 600; text-transform: uppercase;">Tahmini Piyasa Satış Bedeli</div>
+                <div style="color: #93C5FD; font-size: 0.95rem; font-weight: 600;">Tahmini Satış Bedeli</div>
                 <div style="color: #FFFFFF; font-size: 2.2rem; font-weight: 800; margin: 10px 0;">{pred_mid:,.0f} TL</div>
-                <div style="color: #94A3B8; font-size: 0.8rem;">Yapay Zeka Ortalama Değerleme Tahmini</div>
             </div>
             """, unsafe_allow_html=True)
             
             d_alt, d_ust = st.columns(2)
             with d_alt:
-                st.metric("ALT BANT (Hızlı Satış)", f"{pred_low:,.0f} TL")
+                st.metric("Alt Bant (Hızlı Satış)", f"{pred_low:,.0f} TL")
             with d_ust:
-                st.metric("ÜST BANT (Tavan Satış)", f"{pred_high:,.0f} TL")
+                st.metric("Üst Bant (Tavan Satış)", f"{pred_high:,.0f} TL")
 
         with dg2:
             x_vals = np.linspace(pred_low * 0.92, pred_high * 1.08, 200)
@@ -735,12 +715,12 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
                 hoverinfo='skip'
             ))
             
-            fig_curve.add_annotation(x=pred_mid, y=1.05, text=f"<b>Tahmini Değer</b><br>{pred_mid:,.0f} TL", showarrow=True, arrowhead=2, ax=0, ay=-35, font=dict(color="white", size=11))
-            fig_curve.add_annotation(x=pred_low, y=0.15, text=f"Hızlı<br>{pred_low:,.0f} TL", showarrow=True, arrowhead=1, ax=-25, ay=25, font=dict(color="#EF4444", size=10))
-            fig_curve.add_annotation(x=pred_high, y=0.15, text=f"Tavan<br>{pred_high:,.0f} TL", showarrow=True, arrowhead=1, ax=25, ay=25, font=dict(color="#10B981", size=10))
+            fig_curve.add_annotation(x=pred_mid, y=1.05, text=f"<b>Tahmini</b><br>{pred_mid:,.0f} TL", showarrow=True, arrowhead=2, ax=0, ay=-35, font=dict(color="white", size=11))
+            fig_curve.add_annotation(x=pred_low, y=0.15, text=f"Hızlı<br>{pred_low:,.0f}", showarrow=True, arrowhead=1, ax=-25, ay=25, font=dict(color="#EF4444", size=10))
+            fig_curve.add_annotation(x=pred_high, y=0.15, text=f"Tavan<br>{pred_high:,.0f}", showarrow=True, arrowhead=1, ax=25, ay=25, font=dict(color="#10B981", size=10))
 
             fig_curve.update_layout(
-                title=dict(text="<b>Fiyat Dağılımı Aralığı</b>", font=dict(size=14, color="#F8FAFC")),
+                title=dict(text="<b>Fiyat Dağılımı</b>", font=dict(size=14, color="#F8FAFC")),
                 template="plotly_dark",
                 paper_bgcolor="#111827",
                 plot_bgcolor="#111827",
@@ -751,67 +731,63 @@ elif menu_secim == "Gayrimenkul Değerleme Modülü":
             )
             st.plotly_chart(fig_curve, use_container_width=True)
 
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        st.markdown("#### 📈 YATIRIM VE AMORTİSMAN ANALİZİ")
+        st.markdown("### Yatırım Analizi")
         y1, y2, y3 = st.columns(3)
-        y1.metric("Tahmini Aylık Kira Potansiyeli", f"{tahmini_aylik_kira:,.0f} TL / Ay")
+        y1.metric("Aylık Kira Potansiyeli", f"{tahmini_aylik_kira:,.0f} TL")
         y2.metric("Amortisman Süresi", f"{amortisman_yil:.1f} Yıl")
-        y3.metric("Yıllık Brüt Getiri Oranı", f"%{yillik_getiri_yuzde:.2f}")
+        y3.metric("Yıllık Brüt Getiri", f"%{yillik_getiri_yuzde:.2f}")
 
-        # TXT İndirme
-        st.markdown("<br>", unsafe_allow_html=True)
-        rapor_metni = f"""GAYRİMENKUL VE DEĞERLENDİRME ANALİZİ
-Tarih: {rapor_tarih} | {rapor_no}
+        # İndirme Butonları
+        st.markdown("---")
+        
+        rapor_metni = f"""GAYRİMENKUL DEĞER HESAPLAMA RAPORU
+Tarih: {rapor_tarih} | Rapor No: {rapor_no}
 --------------------------------------------------
-1. TAŞINMAZ BİLGİLERİ
 Lokasyon: İstanbul / {s_ilce}
 Brüt Alan: {s_brut} m²
 Bina Yaşı: {s_bina_yasi} Yıl
 Oda Yapısı: {s_oda}+{s_salon}
 
-2. DEĞERLEME SONUÇLARI (CATBOOST REGRESSION)
-Tahmini Piyasa Satış Bedeli: {pred_mid:,.0f} TL
+Tahmini Satış Bedeli: {pred_mid:,.0f} TL
 Alt Bant (Hızlı Satış): {pred_low:,.0f} TL
 Üst Bant (Tavan Satış): {pred_high:,.0f} TL
 
-3. YATIRIM VE AMORTİSMAN ANALİZİ
-Tahmini Aylık Kira Potansiyeli: {tahmini_aylik_kira:,.0f} TL / Ay
-Amortisman Süresi: {amortisman_yil:.1f} Yıl
-Yıllık Brüt Getiri Oranı: %{yillik_getiri_yuzde:.2f}
+Aylık Kira: {tahmini_aylik_kira:,.0f} TL
+Amortisman: {amortisman_yil:.1f} Yıl
+Yıllık Getiri: %{yillik_getiri_yuzde:.2f}
 --------------------------------------------------
-Bu rapor mevcut veriler ve yapay zeka destekli analizler doğrultusunda hazırlanmıştır.
 """
-        st.download_button(
-            label="📥 Bu Görsel Raporu Metin Olarak İndir",
-            data=rapor_metni,
-            file_name=f"Gayrimenkul_Gorsel_Rapor_{s_ilce}_{datetime.now().strftime('%Y%m%d')}.txt",
-            mime="text/plain"
-        )
-
-        # PDF İndirme
-        pdf_bytes = generate_valuation_pdf(
-            lokasyon=f"Istanbul / {s_ilce}",
-            brut_alan=s_brut,
-            bina_yasi=s_bina_yasi,
-            oda_yapisi=f"{s_oda}+{s_salon}",
-            pred_mid=pred_mid,
-            pred_low=pred_low,
-            pred_high=pred_high,
-            tahmini_kira=tahmini_aylik_kira,
-            amortisman_yil=amortisman_yil,
-            yillik_getiri=yillik_getiri_yuzde,
-            rapor_tarih=rapor_tarih,
-            rapor_no=rapor_no
-        )
-
-        st.download_button(
-            label="📥 Profesyonel PDF Raporu İndir",
-            data=pdf_bytes,
-            file_name=f"Gayrimenkul_Degerleme_Raporu_{s_ilce}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
+        col_dl1, col_dl2 = st.columns(2)
+        with col_dl1:
+            st.download_button(
+                label="📥 Metin Olarak İndir",
+                data=rapor_metni,
+                file_name=f"Deger_Hesaplama_{s_ilce}_{datetime.now().strftime('%Y%m%d')}.txt",
+                mime="text/plain",
+                use_container_width=True
+            )
+        with col_dl2:
+            pdf_bytes = generate_valuation_pdf(
+                lokasyon=f"Istanbul / {s_ilce}",
+                brut_alan=s_brut,
+                bina_yasi=s_bina_yasi,
+                oda_yapisi=f"{s_oda}+{s_salon}",
+                pred_mid=pred_mid,
+                pred_low=pred_low,
+                pred_high=pred_high,
+                tahmini_kira=tahmini_aylik_kira,
+                amortisman_yil=amortisman_yil,
+                yillik_getiri=yillik_getiri_yuzde,
+                rapor_tarih=rapor_tarih,
+                rapor_no=rapor_no
+            )
+            st.download_button(
+                label="📥 Profesyonel PDF İndir",
+                data=pdf_bytes,
+                file_name=f"Deger_Hesaplama_{s_ilce}_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
 
 # =========================================================
 # MODÜL 3: COĞRAFİ HARİTA ANALİZİ
